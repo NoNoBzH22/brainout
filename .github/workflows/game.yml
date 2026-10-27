@@ -1,0 +1,148 @@
+name: Game (macOS, Windows, Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - mac-app
+    paths:
+      - .github/workflows/game.yml
+      - build.gradle
+      - core/**
+      - client/**
+      - desktop/**
+      - data/**
+      - scripts/**
+      - macos/**
+      - packaging/**
+
+jobs:
+  # Packing the textures takes ~10 minutes: build the data once, on Linux, and share it with
+  # every system through a cache that is only rebuilt when data/ or scripts/ change.
+  data:
+    name: Game data
+    runs-on: ubuntu-latest
+    outputs:
+      # computed here only: Windows checks files out with other line endings, which changes the hash
+      key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Data cache key
+        id: key
+        run: echo "key=client-data-${{ hashFiles('data/**', 'scripts/**') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache game data
+        id: data-cache
+        uses: actions/cache@v4
+        with:
+          path: bin/client/packages
+          key: ${{ steps.key.outputs.key }}
+          enableCrossOsArchive: true
+
+      - uses: actions/setup-java@v5
+        if: steps.data-cache.outputs.cache-hit != 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v6
+        if: steps.data-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: '3.11'
+
+      - name: Build game data
+        if: steps.data-cache.outputs.cache-hit != 'true'
+        working-directory: scripts
+        run: |
+          pip install PyCryptodome cffi setuptools "git+https://github.com/desertkun/hjson-py"
+          python make_data.py client
+
+  # The jar is the same for every system (it carries all native libraries): build it once.
+  jar:
+    name: Game jar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Build client jar
+        run: ./gradlew --no-daemon :desktop:dist -x :desktop:obfuscate
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: brainout-desktop-jar
+          path: bin/client/brainout-desktop.jar
+          retention-days: 3
+
+  package:
+    name: Package ${{ matrix.name }}
+    needs: [data, jar]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple Silicon)
+            os: macos-15
+            artifact: BrainOut-macOS-arm64
+          - name: Windows
+            os: windows-latest
+            artifact: BrainOut-Windows-x64
+          - name: Linux
+            os: ubuntu-latest
+            artifact: BrainOut-Linux-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Restore game data
+        uses: actions/cache/restore@v4
+        with:
+          path: bin/client/packages
+          key: ${{ needs.data.outputs.key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: brainout-desktop-jar
+          path: bin/client
+
+      - name: Package for macOS
+        if: runner.os == 'macOS'
+        run: |
+          bash macos/build_app.sh build/out
+          ditto -c -k --keepParent build/out/BrainOut.app build/out/${{ matrix.artifact }}.zip
+
+      - name: Package for Windows
+        if: runner.os == 'Windows'
+        run: |
+          bash packaging/build_portable.sh build/out
+          cd build/out && 7z a -tzip ${{ matrix.artifact }}.zip BrainOut > /dev/null
+
+      - name: Package for Linux
+        if: runner.os == 'Linux'
+        run: |
+          bash packaging/build_portable.sh build/out
+          tar -C build/out -czf build/out/${{ matrix.artifact }}.tar.gz BrainOut
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            build/out/*.zip
+            build/out/*.tar.gz
+          compression-level: 0
