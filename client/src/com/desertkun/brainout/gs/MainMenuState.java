@@ -115,7 +115,10 @@ public class MainMenuState extends GameState implements EventReceiver
                                 }
                                 default:
                                 {
-                                    pushMenu(new AlertPopup(L.get("MENU_DISCONNECTED",
+                                    String message = BrainOutClient.ClientController.getDisconnectMessage();
+                                    BrainOutClient.ClientController.setDisconnectMessage(null);
+
+                                    pushMenu(new AlertPopup(message != null ? message : L.get("MENU_DISCONNECTED",
                                             reason.toString()))
                                     {
                                         @Override

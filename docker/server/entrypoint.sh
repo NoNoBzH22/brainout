@@ -5,6 +5,10 @@
 # BOTS            player-like bots roaming the world             (default: 8)
 # BOT_DIFFICULTY  easy, normal, hard, nightmare or mix           (default: mix)
 # BOT_DEBUG       set to anything to log what every bot is doing
+# REGISTRATION    open: logging in with a new name creates the account; closed: no new accounts
+# ALLOWED_ACCOUNTS  comma separated names allowed to create an account (default: anyone)
+# ADMINS          comma separated account names with admin rights (console commands)
+# DATA_DIR        where accounts and profiles are kept           (default: /data, mount a volume)
 # JAVA_OPTS       extra JVM options                              (default: -Xmx1g)
 # Extra container arguments are passed to the server as is.
 

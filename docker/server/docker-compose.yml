@@ -10,6 +10,13 @@ services:
       PORT: "36555"
       BOTS: "8"
       BOT_DIFFICULTY: mix
+      # only these names can create an account, separated by commas
+      ALLOWED_ACCOUNTS: ""
+      # accounts allowed to use admin console commands
+      ADMINS: ""
+    volumes:
+      # accounts, inventories and progress survive updates of the container
+      - /DATA/AppData/brainout:/data
     ports:
       - "36555:36555/tcp"
       - "36556:36556/udp"

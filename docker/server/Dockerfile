@@ -11,6 +11,10 @@ COPY docker/server/entrypoint.sh /usr/local/bin/brainout-server
 RUN chmod +x /usr/local/bin/brainout-server \
     && rm -f /brainout/server/*.bat /brainout/server/*.sh
 
+# accounts and player profiles
+ENV DATA_DIR=/data
+VOLUME /data
+
 EXPOSE 36555/tcp 36556/udp 36557/tcp
 
 ENTRYPOINT ["brainout-server"]

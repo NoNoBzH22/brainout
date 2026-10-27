@@ -260,7 +260,13 @@ public class ClientProfile extends UserProfile
         if (!BrainOut.OnlineEnabled())
         {
             locked = false;
-            Gdx.files.local("default-profile.json").writeString(ext.toString(4), false, "UTF-8");
+
+            if (client.getAccountName() != null)
+            {
+                AccountStore.Get().saveProfile(client.getAccountName(), ext);
+            }
+
+            // guests share the default profile and do not save it
             return;
         }
 

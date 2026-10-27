@@ -49,6 +49,7 @@ public abstract class ControllerState extends ReflectionReceiver
     public boolean received(ServerDisconnect msg)
     {
         getController().setDisconnectReason(msg.reason);
+        getController().setDisconnectMessage(msg.message);
 
         return true;
     }

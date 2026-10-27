@@ -1,5 +1,7 @@
 package com.desertkun.brainout.client;
 
+import com.desertkun.brainout.online.AccountStore;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.*;
@@ -669,12 +671,7 @@ public class PlayerClient extends Client
                         }
                         else
                         {
-                            log("User is admin since online is disabled.");
-
-                            setupOfflineProfile();
-                            onlineInitialized(true);
-                            setRights(PlayerRights.admin);
-                            sendServerInfo();
+                            offlineLogin(msg.accessToken);
                         }
                     }
                     else
@@ -700,6 +697,115 @@ public class PlayerClient extends Client
     {
         JSONObject defaultProfile = new JSONObject(Gdx.files.local("default-profile.json").readString("UTF-8"));
         setProfile(defaultProfile);
+    }
+
+    private String accountName;
+
+    /** Name of the private server account this player logged in with, null for guests. */
+    public String getAccountName()
+    {
+        return accountName;
+    }
+
+    private void offlineLogin(String token)
+    {
+        String[] credentials = AccountStore.ParseToken(token);
+
+        if (credentials == null)
+        {
+            if (System.getenv("ALLOW_GUESTS") == null)
+            {
+                rejectLogin("This server requires an account: update your game.");
+                return;
+            }
+
+            // a guest plays with the shared default profile and no special rights
+            log("Guest joined");
+            setupOfflineProfile();
+            onlineInitialized(true);
+            setRights(PlayerRights.none);
+            sendServerInfo();
+            return;
+        }
+
+        String address = connection != null && connection.getRemoteAddressTCP() != null ?
+            connection.getRemoteAddressTCP().getAddress().getHostAddress() : "?";
+
+        AccountStore accounts = AccountStore.Get();
+        AccountStore.Result result = accounts.authenticate(credentials[0], credentials[1], address);
+
+        switch (result)
+        {
+            case badName:
+                rejectLogin("Account names use 3 to 20 letters, digits, - or _.");
+                return;
+            case badCredentials:
+                log("Wrong password for " + credentials[0] + " from " + address);
+                rejectLogin("Wrong password.");
+                return;
+            case registrationClosed:
+                rejectLogin("No such account, and this server does not accept new accounts.");
+                return;
+            case tooManyAttempts:
+                rejectLogin("Too many wrong passwords, try again in a minute.");
+                return;
+        }
+
+        String name = accounts.getDisplayName(credentials[0]);
+
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        {
+            if (entry.value != this && entry.value instanceof PlayerClient &&
+                name.equalsIgnoreCase(((PlayerClient) entry.value).getAccountName()))
+            {
+                rejectLogin("This account is already playing on the server.");
+                return;
+            }
+        }
+
+        accountName = name;
+        log("Account " + name + (result == AccountStore.Result.registered ? " registered" : " logged in") + " from " + address);
+
+        JSONObject saved = accounts.loadProfile(name);
+        if (saved != null)
+        {
+            setProfile(saved);
+        }
+        else
+        {
+            setupOfflineProfile();
+        }
+
+        profile.setName(name);
+
+        onlineInitialized(true);
+        setRights(accounts.isAdmin(name) ? PlayerRights.admin : PlayerRights.none);
+        sendServerInfo();
+    }
+
+    private void rejectLogin(String message)
+    {
+        log("Login rejected: " + message);
+        setDisconnectReason(DisconnectReason.forbidden);
+        sendTCP(new ServerDisconnect(DisconnectReason.forbidden, message));
+
+        try
+        {
+            BrainOut.Timer.schedule(new TimerTask()
+            {
+                @Override
+                public void run()
+                {
+                    if (connection != null)
+                    {
+                        connection.close();
+                    }
+                }
+            }, 1000);
+        }
+        catch (IllegalStateException ignored)
+        {
+        }
     }
 
     private void extend(String token)
@@ -1819,7 +1925,7 @@ public class PlayerClient extends Client
     @SuppressWarnings("unused")
     public boolean received(final ChangeNameMsg msg)
     {
-        if (profile != null)
+        if (profile != null && accountName == null)
         {
             BrainOutServer.PostRunnable(() ->
             {

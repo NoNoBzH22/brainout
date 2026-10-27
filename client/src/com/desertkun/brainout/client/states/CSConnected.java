@@ -176,7 +176,8 @@ public class CSConnected extends ControllerState
         }
         else
         {
-            getController().sendTCP(new HelloMsg(Version.VERSION, null, null, reconnect));
+            // private servers identify players by their account
+            getController().sendTCP(new HelloMsg(Version.VERSION, null, CSWaitForUser.AccountToken, reconnect));
         }
     }
 

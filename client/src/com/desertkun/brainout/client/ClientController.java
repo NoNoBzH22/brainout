@@ -60,6 +60,7 @@ public class ClientController extends Controller
     private ObjectMap<Integer, RemoteClient> remoteClients;
     private UserProfile userProfile;
     private DisconnectReason disconnectReason;
+    private String disconnectMessage;
     private ClientSettings settings;
     private int myId;
     private int serverHttpPort;
@@ -893,6 +894,7 @@ public class ClientController extends Controller
         }
 
         this.disconnectReason = DisconnectReason.connectionError;
+        this.disconnectMessage = null;
     }
 
     public void disconnect(final DisconnectReason reason, long wait)
@@ -1237,6 +1239,16 @@ public class ClientController extends Controller
     public DisconnectReason getDisconnectReason()
     {
         return disconnectReason;
+    }
+
+    public String getDisconnectMessage()
+    {
+        return disconnectMessage;
+    }
+
+    public void setDisconnectMessage(String disconnectMessage)
+    {
+        this.disconnectMessage = disconnectMessage;
     }
 
     public void setDisconnectReason(DisconnectReason disconnectReason)
