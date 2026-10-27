@@ -12,9 +12,6 @@ buildscript {
         maven { url "https://repo.cuba-platform.com/content/groups/work/" }
     }
     dependencies {
-        classpath 'de.richsource.gradle.plugins:gwt-gradle-plugin:0.6'
-        classpath 'com.android.tools.build:gradle:1.0.0'
-        classpath 'org.robovm:robovm-gradle-plugin:1.9.0'
         classpath 'com.guardsquare:proguard-gradle:7.6.0'
         classpath 'com.github.ben-manes:gradle-versions-plugin:0.11.3'
         classpath 'com.github.rodionmoiseev.gradle.plugins:idea-utils:0.4-rc1'

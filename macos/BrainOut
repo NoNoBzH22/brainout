@@ -1,0 +1,43 @@
+#!/bin/bash
+# Launcher for BrainOut.app (Contents/MacOS/BrainOut).
+# The game reads and writes files relative to its working directory
+# (settings.json, error.log, cache/, packages/), so it runs from a folder in
+# ~/Library/Application Support instead of from inside the read-only bundle.
+
+CONTENTS="$(cd "$(dirname "$0")/.." && pwd)"
+RES="$CONTENTS/Resources"
+DATA="$HOME/Library/Application Support/BrainOut"
+
+mkdir -p "$DATA"
+cd "$DATA" || exit 1
+
+# Game data ships inside the bundle; point the working directory at it.
+# Refreshed on every launch so moving or updating the app keeps working.
+if [ -e packages ] && [ ! -L packages ]; then
+    mv packages "packages.old.$(date +%s)"
+fi
+ln -sfn "$RES/game/packages" packages
+
+# Extra arguments can be put in ~/Library/Application Support/BrainOut/args.txt
+# (one per line), e.g. "--connect brainout://..." to skip the IP prompt.
+EXTRA_ARGS=()
+if [ -f args.txt ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        [ -n "$line" ] && EXTRA_ARGS+=("$line")
+    done < args.txt
+fi
+
+exec "$RES/runtime/bin/java" \
+    -XstartOnFirstThread \
+    -Xmx2g \
+    -Dapple.awt.application.name=BrainOut \
+    --add-opens java.base/java.lang=ALL-UNNAMED \
+    --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
+    --add-opens java.base/java.util=ALL-UNNAMED \
+    --add-opens java.base/java.nio=ALL-UNNAMED \
+    --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
+    --add-opens java.base/java.net=ALL-UNNAMED \
+    -jar "$RES/game/brainout-desktop.jar" \
+    --offline --unsafe \
+    "${EXTRA_ARGS[@]}" "$@" \
+    >> "$DATA/launcher.log" 2>&1
