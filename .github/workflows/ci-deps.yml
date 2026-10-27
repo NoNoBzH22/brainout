@@ -1,0 +1,49 @@
+name: Export build dependencies
+
+# Publishes the compile classpath jars to the ci-deps branch, so the project
+# can be compiled in environments that cannot reach jitpack.io.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - mac-app
+    paths:
+      - .github/workflows/ci-deps.yml
+      - build.gradle
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Collect classpath jars
+        run: |
+          cat >> build.gradle <<'GRADLE'
+
+          task exportDeps(type: Copy) {
+              from(project(':server').configurations.runtimeClasspath)
+              from(project(':desktop').configurations.runtimeClasspath)
+              from(project(':steam').configurations.runtimeClasspath)
+              into "$buildDir/deps"
+          }
+          GRADLE
+          ./gradlew --no-daemon exportDeps
+          ls build/deps
+
+      - name: Push to ci-deps branch
+        run: |
+          mkdir out && cp build/deps/*.jar out/
+          cd out
+          git init -q -b ci-deps
+          git add .
+          git -c user.name="NoNoBzH22" -c user.email="trehelnolhanbzh@gmail.com" commit -q -m "Build dependencies"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" ci-deps
