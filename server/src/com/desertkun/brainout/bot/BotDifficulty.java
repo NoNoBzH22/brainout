@@ -4,11 +4,11 @@ import com.badlogic.gdx.math.MathUtils;
 
 public enum BotDifficulty
 {
-    //          aim spread  turn speed  reaction  view   damage  heal at
-    easy       (2.5f,       0.25f,      1.2f,     32f,   0.5f,   0.35f),
-    normal     (1.0f,       0.6f,       0.3f,     48f,   0.67f,  0.5f),
-    hard       (0.6f,       0.8f,       0.2f,     56f,   1.0f,   0.6f),
-    nightmare  (0.3f,       0.95f,      0.1f,     64f,   1.25f,  0.7f);
+    //          aim spread  turn speed  reaction  view   damage  heal at  tactics
+    easy       (2.5f,       0.25f,      1.2f,     32f,   0.5f,   0.35f,   0.3f),
+    normal     (1.0f,       0.6f,       0.3f,     48f,   0.67f,  0.5f,    0.7f),
+    hard       (0.6f,       0.8f,       0.2f,     56f,   1.0f,   0.6f,    1.0f),
+    nightmare  (0.3f,       0.95f,      0.1f,     64f,   1.25f,  0.7f,    1.0f);
 
     // multiplier of the random angle added to every shot
     public final float aimSpread;
@@ -22,10 +22,13 @@ public enum BotDifficulty
     public final float damageToPlayers;
     // health fraction under which the bot heals itself
     public final float healThreshold;
+    // chance to fall back and heal when hurt in a fight instead of fighting to the death
+    public final float tactics;
 
     BotDifficulty(float aimSpread, float turnSpeed, float reactionTime,
-                  float viewDistance, float damageToPlayers, float healThreshold)
+                  float viewDistance, float damageToPlayers, float healThreshold, float tactics)
     {
+        this.tactics = tactics;
         this.aimSpread = aimSpread;
         this.turnSpeed = turnSpeed;
         this.reactionTime = reactionTime;

@@ -3,7 +3,7 @@
 #
 # PORT            tcp port; udp uses PORT+1 and http PORT+2      (default: 36555)
 # BOTS            player-like bots roaming the world             (default: 8)
-# BOT_DIFFICULTY  easy, normal, hard, nightmare or mix           (default: mix)
+# BOT_DIFFICULTY  adaptive (matches the players around), easy, normal, hard, nightmare or mix (default: adaptive)
 # BOT_DEBUG       set to anything to log what every bot is doing
 # REGISTRATION    open: logging in with a new name creates the account; closed: no new accounts
 # ALLOWED_ACCOUNTS  comma separated names allowed to create an account (default: anyone)
@@ -16,7 +16,7 @@ set -e
 
 PORT="${PORT:-36555}"
 export FREEPLAY_BOTS="${BOTS:-8}"
-export BOT_DIFFICULTY="${BOT_DIFFICULTY:-mix}"
+export BOT_DIFFICULTY="${BOT_DIFFICULTY:-adaptive}"
 
 echo "BrainOut open world: ports=$PORT,$((PORT + 1)),$((PORT + 2)) bots=$FREEPLAY_BOTS difficulty=$BOT_DIFFICULTY"
 

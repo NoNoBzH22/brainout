@@ -9,7 +9,8 @@ services:
     environment:
       PORT: "36555"
       BOTS: "8"
-      BOT_DIFFICULTY: mix
+      # adaptive: bots match the gear and kill streak of the players around them
+      BOT_DIFFICULTY: adaptive
       # only these names can create an account, separated by commas
       ALLOWED_ACCOUNTS: ""
       # accounts allowed to use admin console commands

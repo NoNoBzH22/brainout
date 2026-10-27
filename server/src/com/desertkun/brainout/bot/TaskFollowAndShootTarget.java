@@ -1,5 +1,11 @@
 package com.desertkun.brainout.bot;
 
+import com.desertkun.brainout.bot.freeplay.SurvivalNeeds;
+import com.desertkun.brainout.bot.freeplay.TaskRetreatAndHeal;
+import com.desertkun.brainout.data.active.PlayerData;
+import com.desertkun.brainout.data.components.FreeplayPlayerComponentData;
+import com.desertkun.brainout.data.components.HealthComponentData;
+
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Queue;
@@ -23,6 +29,7 @@ public class TaskFollowAndShootTarget extends Task
     private final RandomValue firePauseTime;
     private float timer, lostSightTimer;
     private float fireTimer, firePauseTimer;
+    private boolean retreatDecided;
     private final ActiveData target;
     private BotControllerComponentData.VisibilityCheckOutput visibilityCheckOutput;
 
@@ -63,6 +70,15 @@ public class TaskFollowAndShootTarget extends Task
             }
 
             float maximumDistance = 1.0f;
+
+            if (shouldRetreat())
+            {
+                getController().stopFollowing();
+                setAim(false);
+                openFire(false);
+                popMeAndPushTask(new TaskRetreatAndHeal(getStack(), target));
+                return;
+            }
 
             if (checkWeapons(true))
                 return;
@@ -166,6 +182,28 @@ public class TaskFollowAndShootTarget extends Task
                 }
             }
         }
+    }
+
+    // a hurt freeplay bot that can patch itself up falls back instead of fighting to the death
+    private boolean shouldRetreat()
+    {
+        if (retreatDecided)
+            return false;
+
+        PlayerData playerData = getPlayerData();
+        if (playerData == null || playerData.getComponent(FreeplayPlayerComponentData.class) == null)
+            return false;
+
+        HealthComponentData health = playerData.getComponentWithSubclass(HealthComponentData.class);
+        BotDifficulty difficulty = getController().getDifficulty();
+
+        if (health == null || health.getHealth() >= health.getInitHealth() * difficulty.healThreshold * 0.8f)
+            return false;
+
+        // decide once per fight
+        retreatDecided = true;
+
+        return MathUtils.random() < difficulty.tactics && SurvivalNeeds.HasHealing(playerData);
     }
 
     private void gotBlocksInOurWay(Queue<WayPointMap.BlockCoordinates> blocks)

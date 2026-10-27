@@ -108,6 +108,22 @@ public class SurvivalNeeds
         return false;
     }
 
+    /** Whether the bot carries something to stop bleeding or restore health. */
+    public static boolean HasHealing(PlayerData playerData)
+    {
+        PlayerOwnerComponent poc = playerData.getComponent(PlayerOwnerComponent.class);
+        if (poc == null)
+            return false;
+
+        for (ObjectMap.Entry<Integer, ConsumableRecord> entry : poc.getConsumableContainer().getData())
+        {
+            if (supplyValue(entry.value, Need.health) > 0 || supplyValue(entry.value, Need.bleeding) > 0)
+                return true;
+        }
+
+        return false;
+    }
+
     private static void debug(Task task, String message)
     {
         if (DEBUG && Log.INFO)

@@ -20,6 +20,8 @@ import com.desertkun.brainout.server.ServerController;
 public class FreePlayBotClient extends BotClient
 {
     private BotDifficulty difficulty = BotDifficulty.normal;
+    // difficulty and gear picked at every spawn from the players around, see BotThreat
+    private boolean adaptive;
 
     public FreePlayBotClient(int id, ServerController serverController)
     {
@@ -34,6 +36,26 @@ public class FreePlayBotClient extends BotClient
     public void setDifficulty(BotDifficulty difficulty)
     {
         this.difficulty = difficulty;
+
+        PlayerData playerData = getPlayerData();
+        if (playerData != null)
+        {
+            BotControllerComponentData bot = playerData.getComponentWithSubclass(BotControllerComponentData.class);
+            if (bot != null)
+            {
+                bot.setDifficulty(difficulty);
+            }
+        }
+    }
+
+    public boolean isAdaptive()
+    {
+        return adaptive;
+    }
+
+    public void setAdaptive(boolean adaptive)
+    {
+        this.adaptive = adaptive;
     }
 
     @Override

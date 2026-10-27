@@ -2047,7 +2047,10 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         while (bots.size < freeplayBots && team != null)
         {
             FreePlayBotClient bot = ((FreePlayBotClient) BrainOutServer.Controller.getClients().newFreePlayBotClient(team));
-            bot.setDifficulty(BotDifficulty.parse(freeplayBotsDifficulty));
+            boolean adaptive = freeplayBotsDifficulty == null || freeplayBotsDifficulty.trim().isEmpty() ||
+                freeplayBotsDifficulty.trim().equalsIgnoreCase("adaptive");
+            bot.setAdaptive(adaptive);
+            bot.setDifficulty(adaptive ? BotDifficulty.normal : BotDifficulty.parse(freeplayBotsDifficulty));
             bot.init();
             bots.add(bot);
 
@@ -3179,7 +3182,11 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
                 poc.getConsumableContainer().addRecord(record);
 
-                if (MathUtils.randomBoolean())
+                if (client instanceof FreePlayBotClient && ((FreePlayBotClient) client).isAdaptive())
+                {
+                    equipAdaptiveBot(((FreePlayBotClient) client), player, poc);
+                }
+                else if (MathUtils.randomBoolean())
                 {
                     OtherConsumables.generate(this, poc.getConsumableContainer());
                 }
@@ -3192,6 +3199,51 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
                 }
             }
         }
+    }
+
+    // gear and skill matching the players around: see BotThreat
+    private void equipAdaptiveBot(FreePlayBotClient bot, PlayerData player, PlayerOwnerComponent poc)
+    {
+        int tier = BotThreat.tierFor(player.getDimension());
+        bot.setDifficulty(BotThreat.difficultyFor(tier));
+
+        ConsumableContainer cnt = poc.getConsumableContainer();
+
+        switch (tier)
+        {
+            case 0:
+            {
+                // knife only, has to find everything
+                if (MathUtils.randomBoolean())
+                {
+                    OtherConsumables.generate(this, cnt);
+                }
+                break;
+            }
+            case 1:
+            {
+                SecondaryWeaponAndAmmo.generate(this, cnt, player.getDimension(), player);
+                OtherConsumables.generate(this, cnt);
+                break;
+            }
+            case 2:
+            {
+                PrimaryWeaponAndAmmo.generate(this, cnt, player.getDimension(), player);
+                OtherConsumables.generate(this, cnt);
+                break;
+            }
+            default:
+            {
+                PrimaryWeaponAndAmmo.generate(this, cnt, player.getDimension(), player);
+                SecondaryWeaponAndAmmo.generate(this, cnt, player.getDimension(), player);
+                RandomAmmo.generate(this, cnt);
+                OtherConsumables.generate(this, cnt);
+                OtherConsumables.generate(this, cnt);
+                break;
+            }
+        }
+
+        if (Log.INFO) Log.info("Bot " + bot.getName() + " spawned at tier " + tier + " (" + bot.getDifficulty() + ")");
     }
 
 
@@ -3771,6 +3823,15 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
     @Override
     public void onClientDeath(Client client, Client killer, PlayerData playerData, InstrumentInfo info)
     {
+        if (client instanceof FreePlayBotClient)
+        {
+            BotThreat.botKilledBy(killer);
+        }
+        else if (client instanceof PlayerClient)
+        {
+            BotThreat.playerDied(client);
+        }
+
         KarmaComponentData kmp = playerData.getComponent(KarmaComponentData.class);
         if (kmp != null)
         {
