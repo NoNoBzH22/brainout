@@ -2,7 +2,7 @@ package com.desertkun.brainout.content.components;
 
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
-import com.desertkun.brainout.client.PlayerClient;
+import com.desertkun.brainout.client.Client;
 import com.desertkun.brainout.content.components.base.ContentComponent;
 import com.desertkun.brainout.data.active.PlayerData;
 import com.desertkun.brainout.data.components.base.Component;
@@ -23,7 +23,8 @@ public abstract class ServerItemActivatorComponent extends ContentComponent
         return null;
     }
 
-    public abstract boolean activate(PlayerClient playerClient, PlayerData playerData, int quality);
+    // client is a PlayerClient for real players, a BotClient for freeplay bots
+    public abstract boolean activate(Client client, PlayerData playerData, int quality);
 
     @Override
     public void read(Json json, JsonValue jsonData)

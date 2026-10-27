@@ -39,7 +39,8 @@ public class TaskFollowAndShootTarget extends Task
         this.firePauseTime = firePauseTime;
         this.visibilityCheckOutput = new BotControllerComponentData.VisibilityCheckOutput();
         this.fireTimer = 0;
-        this.firePauseTimer = firePauseTime.getValue();
+        // time to react before the first burst
+        this.firePauseTimer = firePauseTime.getValue() + getController().getDifficulty().reactionTime;
     }
 
     @Override
@@ -122,7 +123,7 @@ public class TaskFollowAndShootTarget extends Task
                     randomness = 8f;
                 }
 
-                if (getController().lerpAngle(targetAngle + MathUtils.random(-randomness, randomness)))
+                if (getController().lerpAngle(targetAngle + MathUtils.random(-randomness, randomness) * getController().getDifficulty().aimSpread))
                 {
                     fireTimer -= dt;
                     if (fireTimer <= 0)

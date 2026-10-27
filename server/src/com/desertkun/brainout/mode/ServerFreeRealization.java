@@ -8,12 +8,14 @@ import com.badlogic.gdx.utils.*;
 import com.desertkun.brainout.BrainOut;
 import com.desertkun.brainout.BrainOutServer;
 import com.desertkun.brainout.Constants;
+import com.desertkun.brainout.bot.BotDifficulty;
 import com.desertkun.brainout.bot.Task;
 import com.desertkun.brainout.bot.TaskCrow;
 import com.desertkun.brainout.bot.freeplay.TaskFreePlay;
 import com.desertkun.brainout.bot.TaskStack;
 import com.desertkun.brainout.bot.freeplay.TaskZombie;
 import com.desertkun.brainout.client.BotClient;
+import com.desertkun.brainout.client.FreePlayBotClient;
 import com.desertkun.brainout.client.Client;
 import com.desertkun.brainout.client.PlayerClient;
 import com.desertkun.brainout.common.enums.DisconnectReason;
@@ -180,6 +182,10 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
     private TimerTask wavesSyncTimer;
     private ObjectMap<String, WaveWrapper> waves;
 
+    // player-like bots roaming the world, configured with the FREEPLAY_BOTS and BOT_DIFFICULTY env variables
+    private int freeplayBots;
+    private String freeplayBotsDifficulty;
+
     public ServerFreeRealization(GameModeFree gameMode)
     {
         super(gameMode);
@@ -196,6 +202,17 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
         playersAttended = 0;
         timeOfDayOffset = 0;
+
+        try
+        {
+            freeplayBots = Math.max(0, Integer.parseInt(BrainOutServer.getenv("FREEPLAY_BOTS", "freeplay:bots")));
+        }
+        catch (NumberFormatException | NullPointerException ignored)
+        {
+            freeplayBots = 0;
+        }
+
+        freeplayBotsDifficulty = BrainOutServer.getenv("BOT_DIFFICULTY", "bot:difficulty");
     }
 
     private class WaveWrapper
@@ -1585,6 +1602,7 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         scheduleTask(this::updateCrickets, 2000, 2000);
         scheduleTask(this::syncWaves, 5000, 5000);
         scheduleTask(this::spawnCrows, 2000, 2000);
+        scheduleTask(this::ensureFreeplayBots, 15000, 10000);
         //scheduleTask(this::spawnZombies, 1000, 1000);
 
         //spawnSnow();
@@ -2010,6 +2028,116 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
         tasks.add(task);
         BrainOutServer.Timer.schedule(task, delay, repeat);
+    }
+
+    private void ensureFreeplayBots()
+    {
+        Array<FreePlayBotClient> bots = new Array<>();
+
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        {
+            if (entry.value instanceof FreePlayBotClient)
+            {
+                bots.add(((FreePlayBotClient) entry.value));
+            }
+        }
+
+        Team team = BrainOutServer.ContentMgr.get("team-freeplay", Team.class);
+
+        while (bots.size < freeplayBots && team != null)
+        {
+            FreePlayBotClient bot = ((FreePlayBotClient) BrainOutServer.Controller.getClients().newFreePlayBotClient(team));
+            bot.setDifficulty(BotDifficulty.parse(freeplayBotsDifficulty));
+            bot.init();
+            bots.add(bot);
+
+            if (Log.INFO) Log.info("Added freeplay bot " + bot.getName() + " (" + bot.getDifficulty() + ")");
+        }
+
+        if (System.getenv("BOT_DEBUG") != null)
+        {
+            for (FreePlayBotClient bot : bots)
+            {
+                logBotStatus(bot);
+            }
+        }
+
+        while (bots.size > freeplayBots)
+        {
+            FreePlayBotClient bot = bots.pop();
+
+            if (bot.isAlive())
+            {
+                bot.kill(false, true);
+            }
+
+            BrainOutServer.Controller.getClients().releaseClient(bot);
+        }
+    }
+
+    private void logBotStatus(FreePlayBotClient bot)
+    {
+        PlayerData playerData = bot.getPlayerData();
+
+        if (playerData == null || !bot.isAlive())
+        {
+            if (Log.INFO) Log.info("[bot " + bot.getName() + "] dead");
+            return;
+        }
+
+        StringBuilder status = new StringBuilder();
+        status.append("[bot ").append(bot.getName()).append(" ").append(bot.getDifficulty()).append("] ")
+            .append(playerData.getDimension()).append(" ")
+            .append((int) playerData.getX()).append(",").append((int) playerData.getY());
+
+        HealthComponentData health = playerData.getComponentWithSubclass(HealthComponentData.class);
+        if (health != null)
+        {
+            status.append(" hp=").append((int) health.getHealth());
+        }
+
+        FreeplayPlayerComponentData fp = playerData.getComponent(FreeplayPlayerComponentData.class);
+        if (fp != null)
+        {
+            status.append(" hunger=").append((int) fp.getHunger())
+                .append(" thirst=").append((int) fp.getThirst())
+                .append(" temp=").append((int) fp.getTemperature())
+                .append(" radio=").append((int) fp.getRadio())
+                .append(fp.isBleeding() ? " BLEEDING" : "")
+                .append(fp.hasBonesBroken() ? " BONES" : "");
+        }
+
+        if (playerData.isWounded())
+        {
+            status.append(" WOUNDED");
+        }
+
+        if (playerData.getCurrentInstrument() != null)
+        {
+            status.append(" holding=").append(playerData.getCurrentInstrument().getContent().getID());
+        }
+
+        BotControllerComponentData controller = playerData.getComponentWithSubclass(BotControllerComponentData.class);
+        if (controller != null)
+        {
+            status.append(" tasks=");
+            for (Task task : controller.getTasksStack().getTasks())
+            {
+                status.append(task.getClass().getSimpleName()).append(">");
+            }
+        }
+
+        PlayerOwnerComponent poc = playerData.getComponent(PlayerOwnerComponent.class);
+        if (poc != null)
+        {
+            status.append(" items=");
+            for (ObjectMap.Entry<Integer, ConsumableRecord> entry : poc.getConsumableContainer().getData())
+            {
+                status.append(entry.value.getItem().getContent().getID()).append("x").append(entry.value.getAmount()).append(",");
+            }
+        }
+
+        if (Log.INFO) Log.info(status.toString());
     }
 
     @Override
@@ -3608,8 +3736,20 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
         if (sender instanceof BotClient && receiver instanceof PlayerClient)
         {
-            // bots make 1.5 less damage to players
-            dmg /= 1.5f;
+            // bots make less damage to players, depending on their difficulty (1.5 times less for normal)
+            BotDifficulty difficulty = BotDifficulty.normal;
+
+            PlayerData botPlayer = sender.getPlayerData();
+            if (botPlayer != null)
+            {
+                BotControllerComponentData bot = botPlayer.getComponentWithSubclass(BotControllerComponentData.class);
+                if (bot != null)
+                {
+                    difficulty = bot.getDifficulty();
+                }
+            }
+
+            dmg *= difficulty.damageToPlayers;
         }
 
         return super.calculateDamage(receiverTeam, senderTeam, receiverId, senderId, dmg);
@@ -3806,6 +3946,12 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
             }
         }
 
+        if (cA instanceof FreePlayBotClient && cB instanceof FreePlayBotClient)
+        {
+            // player-like bots play solo, like players without a party
+            return cA != cB;
+        }
+
         if (cA instanceof BotClient && cB instanceof BotClient)
         {
             return false;
@@ -3828,6 +3974,11 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
     @Override
     public boolean isEnemies(Client a, Client b)
     {
+        if (a instanceof FreePlayBotClient && b instanceof FreePlayBotClient)
+        {
+            return a != b;
+        }
+
         if (a instanceof BotClient && b instanceof BotClient)
         {
             return false;

@@ -498,6 +498,7 @@ public class BotClient extends Client
         super.beforeInit(playerData);
 
         BotControllerComponentData bot = new BotControllerComponentData(getPlayerData());
+        bot.setClient(this);
         getPlayerData().addComponent(bot);
 
         ServerPhysicsSyncComponentData sync = getPlayerData().getComponent(ServerPhysicsSyncComponentData.class);

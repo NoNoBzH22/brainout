@@ -3,6 +3,7 @@ package com.desertkun.brainout.content.components;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 import com.desertkun.brainout.BrainOutServer;
+import com.desertkun.brainout.client.Client;
 import com.desertkun.brainout.client.PlayerClient;
 import com.desertkun.brainout.common.msg.server.CustomPlayerAnimationMsg;
 import com.desertkun.brainout.common.msg.server.LaunchEffectMsg;
@@ -25,7 +26,7 @@ public class ServerBleedingItemActivatorComponent extends ServerItemActivatorCom
     private String animation;
 
     @Override
-    public boolean activate(PlayerClient playerClient, PlayerData playerData, int quality)
+    public boolean activate(Client client, PlayerData playerData, int quality)
     {
         if (!playerData.isAlive())
             return false;
@@ -51,11 +52,14 @@ public class ServerBleedingItemActivatorComponent extends ServerItemActivatorCom
         if (progress.isRunning())
             return false;
 
-        ModePayload payload = playerClient.getModePayload();
-        if (!(payload instanceof FreePayload))
+        PlayerClient playerClient = client instanceof PlayerClient ? ((PlayerClient) client) : null;
+
+        // bots have no mode payload
+        ModePayload payload = client.getModePayload();
+        if (playerClient != null && !(payload instanceof FreePayload))
             return false;
 
-        playerClient.enablePlayer(false);
+        client.enablePlayer(false);
 
         if (this.animation != null)
         {
@@ -72,19 +76,20 @@ public class ServerBleedingItemActivatorComponent extends ServerItemActivatorCom
             }
         }
 
-        FreePayload freePayload = ((FreePayload) payload);
-
         progress.startNonCancellable(getTime(), () ->
         {
-            playerClient.addStat(getContent() + "-used", 1);
-
-            if (getContent() instanceof ConsumableContent)
+            if (playerClient != null)
             {
-                freePayload.questEvent(FreePlayItemUsedEvent.obtain(playerClient,
-                    ((ConsumableContent) getContent()), 1));
+                playerClient.addStat(getContent() + "-used", 1);
+
+                if (getContent() instanceof ConsumableContent)
+                {
+                    ((FreePayload) payload).questEvent(FreePlayItemUsedEvent.obtain(playerClient,
+                        ((ConsumableContent) getContent()), 1));
+                }
             }
 
-            playerClient.enablePlayer(true);
+            client.enablePlayer(true);
             fp.stopBleeding();
         });
 

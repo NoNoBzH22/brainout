@@ -81,6 +81,9 @@ public class FindItem extends Task
 
                     ItemData itemData = ((ItemData) activeData);
 
+                    if (getController().getUnreachableItems().contains(itemData.getId()))
+                        continue;
+
                     ConsumableRecord found = null;
                     int needAmount = 0;
 

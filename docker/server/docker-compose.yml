@@ -1,28 +1,16 @@
-# Two BrainOut servers: the open world (Free Play) and classic matches with bots.
-# In the game, connect to <server-ip> for Free Play, <server-ip>:36565 for matches.
-# Each server needs its port, port+1 (udp) and port+2 published with the same numbers.
+# BrainOut open world (Free Play) with player-like bots.
+# In the game, connect to the IP of the machine running this container.
+# The three ports must be published with the same numbers.
 services:
-  brainout-free:
+  brainout:
     image: ghcr.io/nonobzh22/brainout-server:latest
-    container_name: brainout-free
+    container_name: brainout
     restart: unless-stopped
     environment:
-      MODE: free
       PORT: "36555"
+      BOTS: "8"
+      BOT_DIFFICULTY: mix
     ports:
       - "36555:36555/tcp"
       - "36556:36556/udp"
       - "36557:36557/tcp"
-
-  brainout-match:
-    image: ghcr.io/nonobzh22/brainout-server:latest
-    container_name: brainout-match
-    restart: unless-stopped
-    environment:
-      MODE: normal
-      PORT: "36565"
-      BOTS: "8"
-    ports:
-      - "36565:36565/tcp"
-      - "36566:36566/udp"
-      - "36567:36567/tcp"

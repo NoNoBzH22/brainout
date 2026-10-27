@@ -27,6 +27,8 @@ public class LoadMagazine extends Task
     private final IntSet weaponBlackList;
     private final ConsumableRecord weaponRecord;
     private final Bullet bullet;
+    // safety net against loading loops
+    private float timeLeft = 60;
 
     public LoadMagazine(TaskStack stack, IntSet weaponBlackList, Bullet bullet, ConsumableRecord weaponRecord)
     {
@@ -98,6 +100,14 @@ public class LoadMagazine extends Task
         {
             if (primary.getRounds() < primary.getClipSize() / 2)
             {
+                if (!FindEssentials.HaveBullets(poc, weaponData, bullet, false))
+                {
+                    // nothing to load the magazine with: keep what is left in it and go looking for ammo,
+                    // instead of detaching and attaching the same magazine forever
+                    popMeAndPushTask(new FindAmmo(getStack(), weaponBlackList, bullet, weaponRecord));
+                    return true;
+                }
+
                 if (primary.unload(poc, false))
                 {
                     notifyReload(pc, weaponData, primary);
@@ -186,7 +196,12 @@ public class LoadMagazine extends Task
     @Override
     protected void update(float dt)
     {
-        // we need to find a weapon
+        timeLeft -= dt;
+        if (timeLeft < 0)
+        {
+            pop();
+            return;
+        }
 
         if (!validate(dt))
         {

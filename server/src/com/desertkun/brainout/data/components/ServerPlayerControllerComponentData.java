@@ -700,7 +700,7 @@ public class ServerPlayerControllerComponentData extends PlayerControllerCompone
         if (activator == null)
             return;
 
-        if (activator.activate(((PlayerClient) client), playerData, record.getQuality()))
+        if (activator.activate(client, playerData, record.getQuality()))
         {
             if (item instanceof DecayConsumableItem)
             {

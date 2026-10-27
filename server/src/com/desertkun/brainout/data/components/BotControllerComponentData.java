@@ -5,10 +5,12 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.ObjectSet;
+import com.badlogic.gdx.utils.IntSet;
 import com.badlogic.gdx.utils.Queue;
 import com.desertkun.brainout.BrainOutServer;
 import com.desertkun.brainout.Constants;
 import com.desertkun.brainout.bot.Task;
+import com.desertkun.brainout.bot.BotDifficulty;
 import com.desertkun.brainout.bot.TaskStack;
 import com.desertkun.brainout.client.BotClient;
 import com.desertkun.brainout.client.Client;
@@ -67,6 +69,11 @@ public class BotControllerComponentData extends ServerPlayerControllerComponentD
     private Vector2 recentPosition;
     private float vStuckCounter;
     private float recentTimer;
+    private BotDifficulty difficulty = BotDifficulty.normal;
+    // items the bot failed to reach, skipped when looking for loot
+    private final IntSet unreachableItems = new IntSet();
+    private long supplySearchBlockedUntil;
+    private long itemUseBlockedUntil;
 
     public interface GotBlocksInWayCallback
     {
@@ -91,6 +98,41 @@ public class BotControllerComponentData extends ServerPlayerControllerComponentD
     public TaskStack getTasksStack()
     {
         return stack;
+    }
+
+    public BotDifficulty getDifficulty()
+    {
+        return difficulty;
+    }
+
+    public void setDifficulty(BotDifficulty difficulty)
+    {
+        this.difficulty = difficulty;
+    }
+
+    public IntSet getUnreachableItems()
+    {
+        return unreachableItems;
+    }
+
+    public boolean canSearchSupplies()
+    {
+        return System.currentTimeMillis() >= supplySearchBlockedUntil;
+    }
+
+    public void blockSupplySearch(long millis)
+    {
+        supplySearchBlockedUntil = System.currentTimeMillis() + millis;
+    }
+
+    public boolean canUseItems()
+    {
+        return System.currentTimeMillis() >= itemUseBlockedUntil;
+    }
+
+    public void blockItemUse(long millis)
+    {
+        itemUseBlockedUntil = System.currentTimeMillis() + millis;
     }
 
     public Queue<Vector2> getFollowPath()
@@ -991,7 +1033,7 @@ public class BotControllerComponentData extends ServerPlayerControllerComponentD
             return false;
 
         float angleHave = playerData.getAngle();
-        float result = MathUtils.lerpAngleDeg(angleHave, angleRequired, 0.6f);
+        float result = MathUtils.lerpAngleDeg(angleHave, angleRequired, difficulty.turnSpeed);
         playerData.setAngle(result);
 
         float diff = Math.abs(angleHave - angleRequired);
@@ -1018,7 +1060,7 @@ public class BotControllerComponentData extends ServerPlayerControllerComponentD
 
         float angleRequired = tmp.angleDeg();
         float angleHave = playerData.getAngle();
-        float result = MathUtils.lerpAngleDeg(angleHave, angleRequired, 0.6f);
+        float result = MathUtils.lerpAngleDeg(angleHave, angleRequired, difficulty.turnSpeed);
         playerData.setAngle(result);
 
         float diff = Math.abs(angleHave - angleRequired);

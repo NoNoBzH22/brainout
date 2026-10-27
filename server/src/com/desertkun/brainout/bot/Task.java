@@ -148,7 +148,7 @@ public abstract class Task
                     return false;
             }
 
-            return getController().checkVisibility(target, 48, null);
+            return getController().checkVisibility(target, getController().getDifficulty().viewDistance, null);
         });
 
         if (a.size > 0)

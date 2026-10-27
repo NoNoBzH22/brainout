@@ -38,12 +38,14 @@ public class FindEssentials
         if (poc == null)
             return false;
 
+        if (SurvivalNeeds.Ensure(task))
+            return true;
+
         WeaponData weaponData = HaveAnyWeapon(poc);
 
         if (weaponData == null)
         {
-            task.pushTask(new FindWeapon(task.getStack(), weaponBlackList));
-            return true;
+            return PushOnce(task, new FindWeapon(task.getStack(), weaponBlackList));
         }
 
         if (playerData.getCurrentInstrument() != weaponData)
@@ -79,7 +81,7 @@ public class FindEssentials
         {
             if (primary.isDetached())
             {
-                task.pushTask(new LoadMagazine(task.getStack(), weaponBlackList, bullet, weaponRecord));
+                PushOnce(task, new LoadMagazine(task.getStack(), weaponBlackList, bullet, weaponRecord));
             }
             else
             {
@@ -89,14 +91,12 @@ public class FindEssentials
                 {
                     if (HaveBullets(poc, weaponData, bullet, false))
                     {
-                        task.pushTask(new LoadMagazine(task.getStack(), weaponBlackList, bullet, weaponRecord));
+                        return PushOnce(task, new LoadMagazine(task.getStack(), weaponBlackList, bullet, weaponRecord));
                     }
                     else
                     {
-                        task.pushTask(new FindAmmo(task.getStack(), weaponBlackList, bullet, weaponRecord));
+                        return PushOnce(task, new FindAmmo(task.getStack(), weaponBlackList, bullet, weaponRecord));
                     }
-
-                    return true;
                 }
             }
         }
@@ -104,8 +104,7 @@ public class FindEssentials
         {
             if (!HaveBullets(poc, weaponData, bullet, true))
             {
-                task.pushTask(new FindAmmo(task.getStack(), weaponBlackList, bullet, weaponRecord));
-                return true;
+                return PushOnce(task, new FindAmmo(task.getStack(), weaponBlackList, bullet, weaponRecord));
             }
         }
 
@@ -116,12 +115,23 @@ public class FindEssentials
             {
                 if (!NearFire(playerData))
                 {
-                    task.pushTask(new TaskSeekFire(task.getStack(), weaponBlackList));
+                    PushOnce(task, new TaskSeekFire(task.getStack(), weaponBlackList));
                 }
             }
         }
 
         return false;
+    }
+
+    // the same essential task can be requested again from tasks running on top of it;
+    // stacking it again would loop forever, so let the caller carry on instead
+    private static boolean PushOnce(Task task, Task essential)
+    {
+        if (task.hasTask(essential.getClass()))
+            return false;
+
+        task.pushTask(essential);
+        return true;
     }
 
     private static boolean NearFire(PlayerData playerData)

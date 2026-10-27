@@ -1,22 +1,39 @@
 package com.desertkun.brainout.client;
 
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.utils.Array;
 import com.desertkun.brainout.BrainOutServer;
+import com.desertkun.brainout.bot.BotDifficulty;
 import com.desertkun.brainout.content.active.FreePlayPlayer;
 import com.desertkun.brainout.content.active.Player;
-import com.desertkun.brainout.content.shop.InstrumentSlotItem;
 import com.desertkun.brainout.content.shop.PlayerSkinSlotItem;
 import com.desertkun.brainout.content.shop.PlayerSlotItem;
 import com.desertkun.brainout.content.shop.Slot;
 import com.desertkun.brainout.data.Map;
+import com.desertkun.brainout.data.active.PlayerData;
+import com.desertkun.brainout.data.components.BotControllerComponentData;
 import com.desertkun.brainout.server.ServerController;
 
+/**
+ * A bot that roams the open world like a player: it spawns as a regular freeplay player
+ * (hunger, thirst, cold, radiation, bleeding), loots, heals and fights.
+ */
 public class FreePlayBotClient extends BotClient
 {
+    private BotDifficulty difficulty = BotDifficulty.normal;
+
     public FreePlayBotClient(int id, ServerController serverController)
     {
         super(id, serverController);
+    }
+
+    public BotDifficulty getDifficulty()
+    {
+        return difficulty;
+    }
+
+    public void setDifficulty(BotDifficulty difficulty)
+    {
+        this.difficulty = difficulty;
     }
 
     @Override
@@ -28,19 +45,31 @@ public class FreePlayBotClient extends BotClient
     @Override
     protected Player getSpawnPlayer()
     {
-        return BrainOutServer.ContentMgr.get("player-fp-bot", FreePlayPlayer.class);
+        return BrainOutServer.ContentMgr.get("player-freeplay", FreePlayPlayer.class);
     }
 
     @Override
     protected String getBotContent()
     {
-        return "sl-pl-freeplay-bot";
+        return "sl-pl-freeplay";
     }
 
     @Override
     protected boolean isMapOkayToSpawn(Map map)
     {
         return !map.isSafeMap();
+    }
+
+    @Override
+    protected void beforeInit(PlayerData playerData)
+    {
+        super.beforeInit(playerData);
+
+        BotControllerComponentData bot = playerData.getComponentWithSubclass(BotControllerComponentData.class);
+        if (bot != null)
+        {
+            bot.setDifficulty(difficulty);
+        }
     }
 
     @Override

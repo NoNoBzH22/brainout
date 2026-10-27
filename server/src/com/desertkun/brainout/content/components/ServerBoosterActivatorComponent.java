@@ -4,6 +4,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.desertkun.brainout.BrainOutServer;
+import com.desertkun.brainout.client.Client;
 import com.desertkun.brainout.client.PlayerClient;
 import com.desertkun.brainout.common.msg.server.CustomPlayerAnimationMsg;
 import com.desertkun.brainout.common.msg.server.LaunchEffectMsg;
@@ -30,7 +31,7 @@ public class ServerBoosterActivatorComponent extends ServerItemActivatorComponen
     }
 
     @Override
-    public boolean activate(PlayerClient playerClient, PlayerData playerData, int quality)
+    public boolean activate(Client client, PlayerData playerData, int quality)
     {
         BoosterActivatorComponent booster = getContent().getComponent(BoosterActivatorComponent.class);
 
@@ -108,11 +109,14 @@ public class ServerBoosterActivatorComponent extends ServerItemActivatorComponen
         if (progress.isRunning())
             return false;
 
-        ModePayload payload = playerClient.getModePayload();
-        if (!(payload instanceof FreePayload))
+        PlayerClient playerClient = client instanceof PlayerClient ? ((PlayerClient) client) : null;
+
+        // bots have no mode payload
+        ModePayload payload = client.getModePayload();
+        if (playerClient != null && !(payload instanceof FreePayload))
             return false;
 
-        playerClient.enablePlayer(false);
+        client.enablePlayer(false);
 
         if (this.animation != null)
         {
@@ -129,16 +133,17 @@ public class ServerBoosterActivatorComponent extends ServerItemActivatorComponen
             }
         }
 
-        FreePayload freePayload = ((FreePayload) payload);
-
         progress.startNonCancellable(getTime(), () ->
         {
-            playerClient.addStat(getContent() + "-used", 1);
+            if (playerClient != null)
+            {
+                playerClient.addStat(getContent() + "-used", 1);
 
-            freePayload.questEvent(FreePlayItemUsedEvent.obtain(playerClient,
-                getContent(), 1));
+                ((FreePayload) payload).questEvent(FreePlayItemUsedEvent.obtain(playerClient,
+                    getContent(), 1));
+            }
 
-            playerClient.enablePlayer(true);
+            client.enablePlayer(true);
 
             if (fp != null)
             {

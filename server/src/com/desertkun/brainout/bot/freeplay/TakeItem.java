@@ -30,6 +30,7 @@ public class TakeItem extends Task
     protected final int takeAmount;
     protected float timer, complete;
     protected boolean reachedItem;
+    protected float giveUpIn = 45;
     protected FindItem.ItemTakenCallback itemTakenCallback;
 
     public TakeItem(TaskStack stack, ItemData item, ConsumableRecord record, int takeAmount,
@@ -53,6 +54,16 @@ public class TakeItem extends Task
             return;
 
         timer = 0.1f;
+
+        giveUpIn -= 0.1f;
+        if (giveUpIn < 0)
+        {
+            // the item cannot be reached, look for something else
+            getController().getUnreachableItems().add(item.getId());
+            getController().stopFollowing();
+            pop();
+            return;
+        }
 
         if (enemyNoticedCallback != null && checkEnemy())
             return;
@@ -142,6 +153,7 @@ public class TakeItem extends Task
 
     private void failed()
     {
+        getController().getUnreachableItems().add(item.getId());
         pop();
     }
 

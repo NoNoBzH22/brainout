@@ -2,7 +2,7 @@ package com.desertkun.brainout.content.components;
 
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
-import com.desertkun.brainout.client.PlayerClient;
+import com.desertkun.brainout.client.Client;
 import com.desertkun.brainout.data.active.PlayerData;
 import com.desertkun.brainout.reflection.Reflect;
 import com.desertkun.brainout.reflection.ReflectAlias;
@@ -16,7 +16,7 @@ public class ServerWalkietalkieActivatorComponent extends ServerItemActivatorCom
     }
 
     @Override
-    public boolean activate(PlayerClient playerClient, PlayerData playerData, int quality)
+    public boolean activate(Client client, PlayerData playerData, int quality)
     {
         return false;
     }
