@@ -5,6 +5,15 @@ on:
   push:
     branches:
       - mac-app
+    paths:
+      - .github/workflows/macos-app.yml
+      - build.gradle
+      - core/**
+      - client/**
+      - desktop/**
+      - data/**
+      - scripts/**
+      - macos/**
 
 jobs:
   build:
@@ -22,10 +31,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Building the data packs textures for ~10 minutes, so reuse the result
+      # until something under data/ or scripts/ changes.
+      - name: Cache game data
+        id: data-cache
+        uses: actions/cache@v4
+        with:
+          path: bin/client/packages
+          key: client-data-${{ hashFiles('data/**', 'scripts/**') }}
+
       - name: Install data build dependencies
+        if: steps.data-cache.outputs.cache-hit != 'true'
         run: pip install PyCryptodome cffi setuptools "git+https://github.com/desertkun/hjson-py"
 
       - name: Build game data
+        if: steps.data-cache.outputs.cache-hit != 'true'
         working-directory: scripts
         run: python make_data.py client
 

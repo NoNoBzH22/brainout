@@ -5,6 +5,15 @@ on:
   push:
     branches:
       - mac-app
+    paths:
+      - .github/workflows/server-docker.yml
+      - build.gradle
+      - core/**
+      - server/**
+      - data/**
+      - scripts/**
+      - bin/server/**
+      - docker/server/**
 
 permissions:
   contents: read
@@ -26,10 +35,19 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache game data
+        id: data-cache
+        uses: actions/cache@v4
+        with:
+          path: bin/server/packages
+          key: server-data-${{ hashFiles('data/**', 'scripts/**') }}
+
       - name: Install data build dependencies
+        if: steps.data-cache.outputs.cache-hit != 'true'
         run: pip install PyCryptodome cffi setuptools "git+https://github.com/desertkun/hjson-py"
 
       - name: Build server game data
+        if: steps.data-cache.outputs.cache-hit != 'true'
         working-directory: scripts
         run: python make_data.py server
 
