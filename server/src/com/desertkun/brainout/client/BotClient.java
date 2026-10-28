@@ -1,5 +1,8 @@
 package com.desertkun.brainout.client;
 
+import com.desertkun.brainout.bot.BotDifficulty;
+import com.desertkun.brainout.bot.MatchBotSkill;
+
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
@@ -54,6 +57,35 @@ public class BotClient extends Client
         protect,
         assault,
         hunter
+    }
+
+    // the level other players see for this bot, in line with how well it plays
+    private int displayLevel;
+    private BotDifficulty displayedFor;
+
+    protected void showLevelFor(BotDifficulty difficulty)
+    {
+        if (displayedFor == difficulty && displayLevel > 0)
+            return;
+
+        displayedFor = difficulty;
+
+        switch (difficulty)
+        {
+            case easy: displayLevel = MathUtils.random(1, 9); break;
+            case normal: displayLevel = MathUtils.random(8, 22); break;
+            case hard: displayLevel = MathUtils.random(20, 38); break;
+            default: displayLevel = MathUtils.random(35, 60); break;
+        }
+    }
+
+    @Override
+    public int getLevel(String kind, int def)
+    {
+        if (displayLevel > 0 && Constants.User.LEVEL.equals(kind))
+            return displayLevel;
+
+        return super.getLevel(kind, def);
     }
 
     public Role getRole()
@@ -500,6 +532,15 @@ public class BotClient extends Client
         BotControllerComponentData bot = new BotControllerComponentData(getPlayerData());
         bot.setClient(this);
         getPlayerData().addComponent(bot);
+
+        if (!(this instanceof FreePlayBotClient))
+        {
+            // match bots: each one has its own skill, matching the players (see MatchBotSkill)
+            BotDifficulty difficulty = MatchBotSkill.pick();
+            bot.setDifficulty(difficulty);
+            showLevelFor(difficulty);
+            log("Skill " + difficulty + ", level " + displayLevel);
+        }
 
         ServerPhysicsSyncComponentData sync = getPlayerData().getComponent(ServerPhysicsSyncComponentData.class);
         if (sync != null)

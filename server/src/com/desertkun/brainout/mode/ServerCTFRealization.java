@@ -1,5 +1,10 @@
 package com.desertkun.brainout.mode;
 
+import com.desertkun.brainout.bot.Task;
+import com.desertkun.brainout.bot.TaskCaptureTheFlag;
+import com.desertkun.brainout.bot.TaskStack;
+import com.desertkun.brainout.client.BotClient;
+
 import com.badlogic.gdx.utils.*;
 import com.desertkun.brainout.BrainOutServer;
 import com.desertkun.brainout.Constants;
@@ -191,6 +196,12 @@ public class ServerCTFRealization extends ServerRealization<GameModeCTF>
     @Override
     public void write(Json json, int owner)
     {
+    }
+
+    @Override
+    public Task getBotStartingTask(TaskStack taskStack, BotClient client)
+    {
+        return new TaskCaptureTheFlag(taskStack, client);
     }
 
     @Override

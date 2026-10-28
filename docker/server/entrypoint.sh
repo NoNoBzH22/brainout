@@ -1,9 +1,15 @@
-#!/bin/sh
-# Starts the offline BrainOut open world (Free Play) server.
+#!/bin/bash
+# Starts the offline BrainOut servers: one game per mode, each on its own ports.
 #
-# PORT            tcp port; udp uses PORT+1 and http PORT+2      (default: 36555)
-# BOTS            player-like bots roaming the world             (default: 8)
-# BOT_DIFFICULTY  adaptive (matches the players around), easy, normal, hard, nightmare or mix (default: adaptive)
+# MODES           comma separated modes to run, in this order        (default: free,deathmatch,ctf)
+#                 free = open world, deathmatch = everyone for themselves, ctf = capture the flag
+# PORT            tcp port of the first mode; each next mode uses 10 more (36555, 36565, 36575...)
+#                 udp uses port+1 and http port+2
+# BOTS            player-like bots roaming the open world            (default: 8)
+# BOT_DIFFICULTY  open world bots: adaptive (matches the players around), easy, normal, hard,
+#                 nightmare or mix                                   (default: adaptive)
+# MATCH_BOTS      bots filling deathmatch and capture the flag games (default: 8)
+# MATCH_BOT_DIFFICULTY  same choices, adaptive follows the players' level and current game
 # BOT_DAMAGE      multiplier of the damage bots deal to players, 0.1 to 5   (default: 1)
 # BOT_ACCURACY    multiplier of bot accuracy, 0.1 to 5                       (default: 1)
 #                 Admins can change the bots live with /bots, /difficulte, /botdegats, /botprecision.
@@ -13,14 +19,15 @@
 # ALLOWED_ACCOUNTS  comma separated names allowed to create an account (default: anyone)
 # ADMINS          comma separated account names with admin rights (console commands)
 # DATA_DIR        where accounts and profiles are kept           (default: /data, mount a volume)
-# JAVA_OPTS       extra JVM options                              (default: -Xmx1g)
-# Extra container arguments are passed to the server as is.
+# JAVA_OPTS       extra JVM options for every mode   (default: -Xmx1g open world, -Xmx512m matches)
 
 set -e
 
 PORT="${PORT:-36555}"
+MODES="${MODES:-free,deathmatch,ctf}"
 export FREEPLAY_BOTS="${BOTS:-8}"
 export BOT_DIFFICULTY="${BOT_DIFFICULTY:-adaptive}"
+MATCH_BOTS="${MATCH_BOTS:-8}"
 
 DATA="${DATA_DIR:-/data}"
 if ! touch "$DATA/.write-test" 2>/dev/null; then
@@ -30,13 +37,47 @@ if ! touch "$DATA/.write-test" 2>/dev/null; then
 fi
 rm -f "$DATA/.write-test"
 
-echo "BrainOut open world: ports=$PORT,$((PORT + 1)),$((PORT + 2)) bots=$FREEPLAY_BOTS difficulty=$BOT_DIFFICULTY"
+start_mode() {
+    local mode="$1" port="$2" settings maps memory bots
 
-exec java \
-    -XX:-OmitStackTraceInFastThrow -XX:+UseG1GC \
-    -Djava.net.preferIPv4Stack=true \
-    ${JAVA_OPTS:--Xmx1g} \
-    -jar /brainout/server/brainout-server.jar \
-    no "$PORT,$((PORT + 1)),$((PORT + 2))" \
-    --offline --mode free --settings server-free.json --maps freeplay-maps.shuffle \
-    "$@"
+    case "$mode" in
+        free)
+            settings=server-free.json; maps=freeplay-maps.shuffle; memory=-Xmx1g; bots=0 ;;
+        deathmatch)
+            settings=server-settings.json; maps=maps-deathmatch.json; memory=-Xmx512m; bots="$MATCH_BOTS" ;;
+        ctf)
+            settings=server-settings.json; maps=maps-ctf.json; memory=-Xmx512m; bots="$MATCH_BOTS" ;;
+        *)
+            echo "ERROR: unknown mode $mode (free, deathmatch, ctf)" >&2
+            exit 1 ;;
+    esac
+
+    echo "BrainOut $mode: ports $port,$((port + 1)),$((port + 2))"
+
+    # match bots are read from server_settings; the open world uses FREEPLAY_BOTS
+    server_settings="{\"bots\":$bots}" java \
+        -XX:-OmitStackTraceInFastThrow -XX:+UseG1GC \
+        -Djava.net.preferIPv4Stack=true \
+        ${JAVA_OPTS:-$memory} \
+        -jar /brainout/server/brainout-server.jar \
+        no "$port,$((port + 1)),$((port + 2))" \
+        --offline --mode "$mode" --settings "$settings" --maps "$maps" \
+        2>&1 | sed -u "s/^/[$mode] /" &
+}
+
+echo "Open world bots: $FREEPLAY_BOTS ($BOT_DIFFICULTY), match bots: $MATCH_BOTS (${MATCH_BOT_DIFFICULTY:-adaptive})"
+
+index=0
+IFS=',' read -ra mode_list <<< "$MODES"
+for mode in "${mode_list[@]}"; do
+    start_mode "$(echo "$mode" | tr -d ' ')" $((PORT + index * 10))
+    index=$((index + 1))
+done
+
+# if any game stops, stop the container so it restarts as a whole
+trap 'kill $(jobs -p) 2>/dev/null' TERM INT
+wait -n
+echo "A game server stopped, shutting down" >&2
+kill $(jobs -p) 2>/dev/null
+wait
+exit 1

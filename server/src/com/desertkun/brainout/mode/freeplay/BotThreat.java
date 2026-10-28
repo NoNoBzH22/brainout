@@ -124,7 +124,8 @@ public class BotThreat
         int nearby = -1;
         int total = 0, count = 0;
 
-        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        // a separate iterator: callers may already be iterating over the clients
+        for (ObjectMap.Entry<Integer, Client> entry : new ObjectMap.Entries<>(BrainOutServer.Controller.getClients()))
         {
             if (!(entry.value instanceof PlayerClient) || !entry.value.isAlive())
                 continue;

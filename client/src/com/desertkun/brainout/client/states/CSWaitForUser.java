@@ -3,6 +3,10 @@ package com.desertkun.brainout.client.states;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.utils.ArrayMap;
+import com.desertkun.brainout.menu.Popup;
+import com.desertkun.brainout.menu.ui.ClickOverListener;
 import com.desertkun.brainout.BrainOut;
 import com.desertkun.brainout.BrainOutClient;
 import com.desertkun.brainout.menu.popups.AlertPopup;
@@ -63,9 +67,60 @@ public class CSWaitForUser extends ControllerState
                 String value = valueEdit.getText().trim();
                 writeLocal(LAST_ADDRESS_FILE, value);
 
-                askAccount(value);
+                askMode(value);
             }
         });
+    }
+
+    // the server runs one game per mode, each on its own ports: base port + 10 * mode
+    private static final String[] MODES = {"Monde ouvert", "Melee generale", "Capture du drapeau"};
+
+    private void askMode(String address)
+    {
+        BrainOutClient.getInstance().topState().pushMenu(new Popup("Choisis un mode")
+        {
+            {
+                ArrayMap<String, PopupButtonStyle> buttons = new ArrayMap<>();
+
+                for (int i = 0; i < MODES.length; i++)
+                {
+                    final int mode = i;
+                    buttons.put(MODES[i], new PopupButtonStyle(new ClickOverListener()
+                    {
+                        @Override
+                        public void clicked(InputEvent event, float x, float y)
+                        {
+                            playSound(MenuSound.select);
+                            pop();
+                            askAccount(withModePort(address, mode));
+                        }
+                    }));
+                }
+
+                setButtons(buttons);
+            }
+        });
+    }
+
+    private static String withModePort(String address, int mode)
+    {
+        String host = address;
+        int port = 36555;
+
+        int colon = address.lastIndexOf(':');
+        if (colon > 0)
+        {
+            try
+            {
+                port = Integer.parseInt(address.substring(colon + 1));
+                host = address.substring(0, colon);
+            }
+            catch (NumberFormatException ignored)
+            {
+            }
+        }
+
+        return host + ":" + (port + mode * 10);
     }
 
     private void askAccount(String address)

@@ -691,6 +691,19 @@ public class BrainOutServer extends BrainOut implements Runnable
             ensureBots = serverSettingsJson.optInt("bots", ensureBots);
             if (Log.INFO) Log.info("Ensure bots: " + ensureBots);
 
+            if (System.getenv("BOT_DEBUG") != null && ensureBots > 0)
+            {
+                // matches only add bots when a player joins; for testing, add them right away
+                Timer.schedule(new java.util.TimerTask()
+                {
+                    @Override
+                    public void run()
+                    {
+                        PostRunnable(() -> Controller.getClients().ensureBots());
+                    }
+                }, 15000);
+            }
+
             autoExec = serverSettingsJson.optString("exec");
             if (autoExec != null)
             {

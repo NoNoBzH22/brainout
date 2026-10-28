@@ -1,6 +1,6 @@
-# BrainOut open world (Free Play) with player-like bots.
-# In the game, connect to the IP of the machine running this container.
-# The three ports must be published with the same numbers.
+# BrainOut private server: open world, deathmatch and capture the flag, all with bots.
+# In the game, enter the IP of the machine running this container, then pick a mode.
+# Each mode uses three ports (tcp, udp, http), published with the same numbers.
 services:
   brainout:
     image: ghcr.io/nonobzh22/brainout-server:latest
@@ -12,7 +12,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: 1536m
+    mem_limit: 3g
     cpus: 2
     pids_limit: 256
     environment:
@@ -20,6 +20,11 @@ services:
       BOTS: "8"
       # adaptive: bots match the gear and kill streak of the players around them
       BOT_DIFFICULTY: adaptive
+      # modes to run: free (open world), deathmatch, ctf (capture the flag)
+      MODES: "free,deathmatch,ctf"
+      # bots filling deathmatch and capture the flag games, and their skill
+      MATCH_BOTS: "8"
+      MATCH_BOT_DIFFICULTY: adaptive
       # bot damage and accuracy multipliers (admins can also change them live with /botdegats and /botprecision)
       BOT_DAMAGE: "1"
       BOT_ACCURACY: "1"
@@ -33,6 +38,15 @@ services:
       # accounts, inventories and progress survive updates of the container
       - /DATA/AppData/brainout:/data
     ports:
+      # open world
       - "36555:36555/tcp"
       - "36556:36556/udp"
       - "36557:36557/tcp"
+      # deathmatch
+      - "36565:36565/tcp"
+      - "36566:36566/udp"
+      - "36567:36567/tcp"
+      # capture the flag
+      - "36575:36575/tcp"
+      - "36576:36576/udp"
+      - "36577:36577/tcp"

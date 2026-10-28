@@ -131,6 +131,11 @@ public class ServerChipItemComponentData extends ServerItemComponentData<ServerC
         this.delivered = delivered;
     }
 
+    public ServerChipReceiverComponentData getDelivered()
+    {
+        return delivered;
+    }
+
     public boolean isDelivered()
     {
         return delivered != null;

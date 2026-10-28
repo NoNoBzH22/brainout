@@ -36,6 +36,7 @@ public class FreePlayBotClient extends BotClient
     public void setDifficulty(BotDifficulty difficulty)
     {
         this.difficulty = difficulty;
+        showLevelFor(difficulty);
 
         PlayerData playerData = getPlayerData();
         if (playerData != null)

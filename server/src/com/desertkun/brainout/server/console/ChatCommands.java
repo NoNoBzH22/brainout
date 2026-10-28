@@ -6,6 +6,7 @@ import com.desertkun.brainout.BrainOutServer;
 import com.desertkun.brainout.Constants;
 import com.desertkun.brainout.bot.BotDifficulty;
 import com.desertkun.brainout.bot.BotTuning;
+import com.desertkun.brainout.bot.MatchBotSkill;
 import com.desertkun.brainout.client.Client;
 import com.desertkun.brainout.client.FreePlayBotClient;
 import com.desertkun.brainout.client.PlayerClient;
@@ -152,15 +153,21 @@ public class ChatCommands
                 case "difficulte":
                 case "difficulty":
                 {
-                    if (free == null)
-                        break;
                     String difficulty = arg(args, 1, "adaptive").toLowerCase(Locale.ROOT);
                     if (!difficulty.equals("adaptive") && !difficulty.equals("mix") && !isDifficulty(difficulty))
                     {
                         player.sendSystemMessage("Difficultes : adaptive, easy, normal, hard, nightmare, mix");
                         return true;
                     }
-                    free.setFreeplayBotsDifficulty(difficulty);
+                    if (free != null)
+                    {
+                        free.setFreeplayBotsDifficulty(difficulty);
+                    }
+                    else
+                    {
+                        // matches: applies from the next respawn of each bot
+                        MatchBotSkill.setSetting(difficulty);
+                    }
                     player.sendSystemMessage("Difficulte des bots : " + difficulty);
                     return true;
                 }
