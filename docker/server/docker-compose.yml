@@ -6,6 +6,15 @@ services:
     image: ghcr.io/nonobzh22/brainout-server:latest
     container_name: brainout
     restart: unless-stopped
+    # the server runs as uid 10001 without any privilege; before the first start:
+    #   chown -R 10001:10001 /DATA/AppData/brainout
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1536m
+    cpus: 2
+    pids_limit: 256
     environment:
       PORT: "36555"
       BOTS: "8"

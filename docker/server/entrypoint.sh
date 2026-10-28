@@ -18,6 +18,14 @@ PORT="${PORT:-36555}"
 export FREEPLAY_BOTS="${BOTS:-8}"
 export BOT_DIFFICULTY="${BOT_DIFFICULTY:-adaptive}"
 
+DATA="${DATA_DIR:-/data}"
+if ! touch "$DATA/.write-test" 2>/dev/null; then
+    echo "ERROR: $DATA is not writable by user $(id -u). Give it to the server on the host:" >&2
+    echo "  chown -R $(id -u):$(id -g) <the host folder mounted on $DATA>" >&2
+    exit 1
+fi
+rm -f "$DATA/.write-test"
+
 echo "BrainOut open world: ports=$PORT,$((PORT + 1)),$((PORT + 2)) bots=$FREEPLAY_BOTS difficulty=$BOT_DIFFICULTY"
 
 exec java \
