@@ -7,14 +7,14 @@
 #
 # Usage: macos/build_app.sh [output_dir]   (default: build/macos)
 # Uses $JAVA_HOME's jlink to embed a Java runtime matching the build machine's
-# architecture (arm64 on Apple Silicon).
+# architecture (arm64 on Apple Silicon). From another system, set MAC_RUNTIME to the
+# Contents/Home folder of a macOS Java 17 runtime (already signed by its vendor).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$ROOT/build/macos}"
 APP="$OUT/BrainOut.app"
-JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home -v 17)}"
 
 JAR="$ROOT/bin/client/brainout-desktop.jar"
 PACKAGES="$ROOT/bin/client/packages"
@@ -35,13 +35,20 @@ cp "$ROOT/data/assets/main/icons/icon.icns" "$APP/Contents/Resources/icon.icns"
 cp "$JAR" "$APP/Contents/Resources/game/"
 cp -R "$PACKAGES" "$APP/Contents/Resources/game/packages"
 
+if [ -n "${MAC_RUNTIME:-}" ]; then
+    cp -R "$MAC_RUNTIME" "$APP/Contents/Resources/runtime"
+else
+JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home -v 17)}"
 "$JAVA_HOME/bin/jlink" \
     --add-modules java.base,java.desktop,java.logging,java.management,java.naming,java.net.http,java.prefs,java.scripting,java.security.jgss,java.sql,java.xml,jdk.charsets,jdk.crypto.ec,jdk.httpserver,jdk.localedata,jdk.unsupported,jdk.zipfs \
     --strip-debug --no-header-files --no-man-pages --compress=2 \
     --output "$APP/Contents/Resources/runtime"
+fi
 
 # Ad-hoc signature: required for arm64 binaries to run; not notarized, so
 # the first launch needs right-click > Open (or xattr -dr com.apple.quarantine).
-codesign --force --deep --sign - "$APP"
+if command -v codesign > /dev/null; then
+    codesign --force --deep --sign - "$APP"
+fi
 
 echo "Built $APP"

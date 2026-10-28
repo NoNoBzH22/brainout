@@ -88,7 +88,10 @@ jobs:
       matrix:
         include:
           - name: macOS (Apple Silicon)
-            os: macos-15
+            # packaged on Linux with a ready made macOS runtime: GitHub's Apple Silicon
+            # runners are often unavailable for a long time
+            os: ubuntu-latest
+            mac: true
             artifact: BrainOut-macOS-arm64
           - name: Windows
             os: windows-latest
@@ -121,11 +124,26 @@ jobs:
           name: brainout-desktop-jar
           path: bin/client
 
-      - name: Package for macOS
-        if: runner.os == 'macOS'
+      - name: Cache macOS runtime
+        if: matrix.mac
+        id: mac-runtime
+        uses: actions/cache@v4
+        with:
+          path: build/mac-runtime
+          key: mac-runtime-temurin-17-aarch64-v1
+
+      - name: Download macOS runtime
+        if: matrix.mac && steps.mac-runtime.outputs.cache-hit != 'true'
         run: |
-          bash macos/build_app.sh build/out
-          ditto -c -k --keepParent build/out/BrainOut.app build/out/${{ matrix.artifact }}.zip
+          mkdir -p build/mac-runtime
+          curl -fsSL "https://api.adoptium.net/v3/binary/latest/17/ga/mac/aarch64/jre/hotspot/normal/eclipse" \
+            | tar -xz -C build/mac-runtime --strip-components=1
+
+      - name: Package for macOS
+        if: matrix.mac
+        run: |
+          MAC_RUNTIME=build/mac-runtime/Contents/Home bash macos/build_app.sh build/out
+          cd build/out && zip -qry ${{ matrix.artifact }}.zip BrainOut.app
 
       - name: Package for Windows
         if: runner.os == 'Windows'
@@ -134,7 +152,7 @@ jobs:
           cd build/out && 7z a -tzip ${{ matrix.artifact }}.zip BrainOut > /dev/null
 
       - name: Package for Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.mac
         run: |
           bash packaging/build_portable.sh build/out
           tar -C build/out -czf build/out/${{ matrix.artifact }}.tar.gz BrainOut
