@@ -63,8 +63,14 @@ public class PrivateStatsMenu extends Menu
 
     private final Table rows = new Table();
     private final Label summary = new Label("Chargement...", BrainOutClient.Skin, "title-small");
+    private final Label hint = new Label("Clique sur une colonne pour trier. MO = monde ouvert.",
+        BrainOutClient.Skin, "title-gray");
+    private final TextButton rankingTab = new TextButton("Classement", BrainOutClient.Skin, "button-green");
+    private final TextButton challengesTab = new TextButton("Defis de la semaine", BrainOutClient.Skin, "button-default");
+    private JSONObject result;
     private JSONArray players;
     private String me;
+    private boolean showChallenges;
     private int sortColumn = 0;
     private boolean onTop = true;
 
@@ -84,11 +90,34 @@ public class PrivateStatsMenu extends Menu
 
         data.add(new Label("Classement du serveur", BrainOutClient.Skin, "title-yellow")).padTop(16).row();
 
+        Table tabs = new Table();
+        tabs.add(rankingTab).size(220, 40).pad(4);
+        tabs.add(challengesTab).size(220, 40).pad(4);
+        data.add(tabs).row();
+
+        rankingTab.addListener(new ClickOverListener()
+        {
+            @Override
+            public void clicked(InputEvent event, float x, float y)
+            {
+                playSound(MenuSound.select);
+                switchTab(false);
+            }
+        });
+        challengesTab.addListener(new ClickOverListener()
+        {
+            @Override
+            public void clicked(InputEvent event, float x, float y)
+            {
+                playSound(MenuSound.select);
+                switchTab(true);
+            }
+        });
+
         summary.setAlignment(Align.center);
         data.add(summary).pad(8).row();
 
-        data.add(new Label("Clique sur une colonne pour trier. MO = monde ouvert.",
-            BrainOutClient.Skin, "title-gray")).padBottom(8).row();
+        data.add(hint).padBottom(8).row();
 
         ScrollPane pane = new ScrollPane(rows, BrainOutClient.Skin, "scroll-default");
         pane.setScrollingDisabled(true, false);
@@ -127,15 +156,125 @@ public class PrivateStatsMenu extends Menu
 
             Gdx.app.postRunnable(() ->
             {
+                this.result = result;
                 players = result.optJSONArray("players");
                 me = result.optString("me", "");
-                renderRanking();
+                refresh();
             });
         }, "private-stats").start();
     }
 
+    private void switchTab(boolean challenges)
+    {
+        showChallenges = challenges;
+        rankingTab.setStyle(BrainOutClient.Skin.get(challenges ? "button-default" : "button-green",
+            TextButton.TextButtonStyle.class));
+        challengesTab.setStyle(BrainOutClient.Skin.get(challenges ? "button-green" : "button-default",
+            TextButton.TextButtonStyle.class));
+        refresh();
+    }
+
+    private void refresh()
+    {
+        if (result == null)
+            return;
+
+        if (showChallenges)
+        {
+            renderChallenges();
+        }
+        else
+        {
+            renderRanking();
+        }
+    }
+
+    /** What everyone did since Monday, the leaders of each challenge and last week's winners. */
+    private void renderChallenges()
+    {
+        rows.clear();
+
+        long left = Math.max(0, result.optLong("weekEnds") - System.currentTimeMillis());
+        summary.setText("Fin des defis dans " + (left / 86400000L) + " j " + (left / 3600000L % 24) + " h");
+        hint.setText("Ce qui compte : ce que vous faites depuis lundi.");
+
+        JSONArray challenges = result.optJSONArray("challenges");
+        if (challenges == null || players == null)
+            return;
+
+        for (int c = 0; c < challenges.length(); c++)
+        {
+            JSONObject challenge = challenges.getJSONObject(c);
+            String stat = challenge.optString("stat");
+
+            Array<JSONObject> sorted = new Array<>();
+            for (int i = 0; i < players.length(); i++)
+            {
+                sorted.add(players.getJSONObject(i));
+            }
+            sorted.sort((a, b) -> Long.compare(Week(b, stat), Week(a, stat)));
+
+            Table block = new Table();
+            block.add(new Label(challenge.optString("title"), BrainOutClient.Skin, "title-yellow")).left().row();
+
+            long mine = 0;
+            int shown = 0;
+
+            for (int i = 0; i < sorted.size; i++)
+            {
+                JSONObject player = sorted.get(i);
+                long value = Week(player, stat);
+                boolean isMe = player.optString("name").equalsIgnoreCase(me);
+
+                if (isMe)
+                    mine = value;
+
+                if (shown < 3 && value > 0)
+                {
+                    block.add(new Label((i + 1) + ". " + player.optString("name") + " : " + value,
+                        BrainOutClient.Skin, isMe ? "title-green" : "title-small")).left().padLeft(16).row();
+                    shown++;
+                }
+            }
+
+            if (shown == 0)
+            {
+                block.add(new Label("Personne pour l'instant, a toi de jouer !", BrainOutClient.Skin, "title-gray"))
+                    .left().padLeft(16).row();
+            }
+
+            block.add(new Label("Toi : " + mine, BrainOutClient.Skin, "title-green")).left().padLeft(16).row();
+
+            Button row = new Button(BrainOutClient.Skin, c % 2 == 0 ? "button-row-dark-blue" : "button-row-border-blue");
+            row.setTouchable(Touchable.disabled);
+            row.add(block).expandX().left().pad(8);
+            rows.add(row).expandX().fillX().padBottom(4).row();
+        }
+
+        JSONArray winners = result.optJSONArray("lastWeek");
+        if (winners != null && winners.length() > 0)
+        {
+            rows.add(new Label("Gagnants de la semaine derniere", BrainOutClient.Skin, "title-yellow"))
+                .padTop(16).row();
+
+            for (int i = 0; i < winners.length(); i++)
+            {
+                JSONObject winner = winners.getJSONObject(i);
+                rows.add(new Label(winner.optString("challenge") + " : " + winner.optString("name") +
+                    " (" + winner.optLong("value") + ")", BrainOutClient.Skin, "title-small")).row();
+            }
+        }
+    }
+
+    private static long Week(JSONObject player, String stat)
+    {
+        JSONObject week = player.optJSONObject("week");
+        return week != null ? week.optLong(stat) : 0;
+    }
+
     private void renderRanking()
     {
+        hint.setText("Clique sur une colonne pour trier. MO = monde ouvert.");
         rows.clear();
 
         if (players == null || players.length() == 0)

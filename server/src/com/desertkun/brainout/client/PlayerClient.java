@@ -828,6 +828,7 @@ public class PlayerClient extends Client
         }
         sendTCP(new PrivateSessionMsg(session, LocalMarket.PATH));
         LocalStats.PlayerJoined(name);
+        announceArrival(profile.getName());
 
         onlineInitialized(true);
         setRights(accounts.isAdmin(name) ? PlayerRights.admin : PlayerRights.none);
@@ -856,6 +857,25 @@ public class PlayerClient extends Client
     public void sendSystemMessage(String text)
     {
         sendTCP(new ChatMsg("Server", text, "server", ServerConstants.Chat.COLOR_INFO, -1));
+    }
+
+    private void announceArrival(String name)
+    {
+        String mode = System.getenv("PRIVATE_MODE");
+        String where = mode == null ? "" :
+            mode.equals("free") ? " dans le monde ouvert" :
+            mode.equals("deathmatch") ? " en melee generale" :
+            mode.equals("ctf") ? " en capture du drapeau" : "";
+
+        for (ObjectMap.Entry<Integer, Client> entry : new ObjectMap.Entries<>(BrainOutServer.Controller.getClients()))
+        {
+            if (entry.value instanceof PlayerClient && entry.value != this)
+            {
+                ((PlayerClient) entry.value).sendSystemMessage(name + " a rejoint la partie" + where + ".");
+            }
+        }
+
+        sendSystemMessage("Bienvenue " + name + " ! Tape /aide pour les commandes, /defis pour les defis de la semaine.");
     }
 
     private void rejectLogin(String message)

@@ -18,18 +18,23 @@ import com.desertkun.brainout.data.components.HealthComponentData;
 import com.desertkun.brainout.data.components.ServerFreeplayPlayerComponentData;
 import com.desertkun.brainout.mode.GameMode;
 import com.desertkun.brainout.mode.ServerFreeRealization;
+import com.desertkun.brainout.online.LocalStats;
 import com.desertkun.brainout.online.PlayerRights;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.Locale;
 
 /**
- * Commands typed in the chat on private servers, starting with "/": /squad and /aide for everyone,
- * the rest for admins (the ADMINS setting of the server).
+ * Commands typed in the chat on private servers, starting with "/": /squad, /aide, /stats, /top
+ * and /defis for everyone, the rest for admins (the ADMINS setting of the server).
  */
 public class ChatCommands
 {
-    private static final String HELP_PLAYER =
-        "/squad NOM : rejoindre une escouade, /squad : la quitter";
+    private static final String[] HELP_PLAYER = {
+        "/squad NOM : rejoindre une escouade, /squad : la quitter",
+        "/stats [JOUEUR] : statistiques   /top : classement   /defis : defis de la semaine",
+    };
 
     private static final String[] HELP_ADMIN = {
         "/give OBJET [nombre] : se donner un objet (ex: /give ak74, /give bandage 5)",
@@ -39,6 +44,7 @@ public class ChatCommands
         "/joueurs : qui est en ligne   /bots [nombre]   /xp NOMBRE [JOUEUR] : donner de l'XP",
         "/difficulte adaptive|easy|normal|hard|nightmare|mix",
         "/botdegats 0.1-5 (1 = normal)   /botprecision 0.1-5 (1 = normal)",
+        "/largage : largage d'armes   /boss : faire apparaitre un boss (monde ouvert)",
     };
 
     /** @return true if the text was a command (it is not sent to the chat then) */
@@ -55,7 +61,10 @@ public class ChatCommands
             case "aide":
             case "help":
             {
-                player.sendSystemMessage(HELP_PLAYER);
+                for (String line : HELP_PLAYER)
+                {
+                    player.sendSystemMessage(line);
+                }
                 if (isAdmin(player))
                 {
                     for (String line : HELP_ADMIN)
@@ -65,6 +74,16 @@ public class ChatCommands
                 }
                 return true;
             }
+            case "stats":
+                stats(player, args.length > 1 ? args[1] : player.getAccountName());
+                return true;
+            case "top":
+                top(player);
+                return true;
+            case "defis":
+            case "challenges":
+                challenges(player);
+                return true;
         }
 
         if (!isAdmin(player))
@@ -178,6 +197,17 @@ public class ChatCommands
                     }
                     player.sendSystemMessage("Degats des bots x" + BotTuning.getDamage());
                     return true;
+                case "largage":
+                case "airdrop":
+                    if (free == null)
+                        break;
+                    player.sendSystemMessage(free.startAirDrop() ? "Largage lance." : "Largage impossible ici.");
+                    return true;
+                case "boss":
+                    if (free == null)
+                        break;
+                    player.sendSystemMessage(free.spawnBoss() ? "Le boss arrive." : "Un boss est deja la.");
+                    return true;
                 case "botprecision":
                     if (args.length > 1)
                     {
@@ -195,6 +225,98 @@ public class ChatCommands
 
         player.sendSystemMessage("Commande inconnue. Tape /aide.");
         return true;
+    }
+
+    private static JSONObject findPlayer(JSONArray players, String name)
+    {
+        if (name == null)
+            return null;
+
+        for (int i = 0; i < players.length(); i++)
+        {
+            JSONObject p = players.getJSONObject(i);
+            if (p.optString("name").equalsIgnoreCase(name))
+                return p;
+        }
+
+        // the start of a name is enough
+        for (int i = 0; i < players.length(); i++)
+        {
+            JSONObject p = players.getJSONObject(i);
+            if (p.optString("name").toLowerCase(Locale.ROOT).startsWith(name.toLowerCase(Locale.ROOT)))
+                return p;
+        }
+
+        return null;
+    }
+
+    private static void stats(PlayerClient player, String name)
+    {
+        JSONObject p = findPlayer(LocalStats.Snapshot().getJSONArray("players"), name);
+
+        if (p == null)
+        {
+            player.sendSystemMessage("Pas de statistiques pour " + name + ".");
+            return;
+        }
+
+        long kills = p.optLong("kills"), deaths = p.optLong("deaths");
+        player.sendSystemMessage(p.optString("name") + " : niveau " + p.optLong("level") +
+            ", " + kills + " kills, " + deaths + " morts (K/D " +
+            String.format(Locale.ROOT, "%.2f", kills / (float) Math.max(1, deaths)) + "), " +
+            p.optLong("headshots") + " tirs a la tete");
+        player.sendSystemMessage("Monde ouvert : " + p.optLong("fpKills") + " kills, " + p.optLong("fpExits") +
+            " sorties. Victoires : " + p.optLong("won") + ". Temps de jeu : " + (p.optLong("minutes") / 60) + " h" +
+            (p.optString("online").isEmpty() ? "" : ". En ligne (" + p.optString("online") + ")"));
+    }
+
+    private static void top(PlayerClient player)
+    {
+        JSONArray players = LocalStats.Snapshot().getJSONArray("players");
+        Array<JSONObject> sorted = new Array<>();
+        for (int i = 0; i < players.length(); i++)
+        {
+            sorted.add(players.getJSONObject(i));
+        }
+        sorted.sort((a, b) -> a.optLong("level") != b.optLong("level") ?
+            Long.compare(b.optLong("level"), a.optLong("level")) : Long.compare(b.optLong("score"), a.optLong("score")));
+
+        player.sendSystemMessage("Classement (niveau) :");
+        for (int i = 0; i < Math.min(5, sorted.size); i++)
+        {
+            JSONObject p = sorted.get(i);
+            player.sendSystemMessage((i + 1) + ". " + p.optString("name") + " - niveau " + p.optLong("level") +
+                ", " + p.optLong("kills") + " kills");
+        }
+    }
+
+    private static void challenges(PlayerClient player)
+    {
+        JSONObject snapshot = LocalStats.Snapshot();
+        JSONArray players = snapshot.getJSONArray("players");
+
+        long left = snapshot.optLong("weekEnds") - System.currentTimeMillis();
+        player.sendSystemMessage("Defis de la semaine (fin dans " + (left / 86400000L) + " j " +
+            (left / 3600000L % 24) + " h) :");
+
+        for (String[] challenge : LocalStats.CHALLENGES)
+        {
+            String best = null;
+            long bestValue = 0;
+
+            for (int i = 0; i < players.length(); i++)
+            {
+                JSONObject p = players.getJSONObject(i);
+                long value = p.getJSONObject("week").optLong(challenge[1]);
+                if (value > bestValue)
+                {
+                    best = p.optString("name");
+                    bestValue = value;
+                }
+            }
+
+            player.sendSystemMessage(challenge[0] + " : " + (best == null ? "personne encore" : best + " (" + bestValue + ")"));
+        }
     }
 
     private static boolean isAdmin(PlayerClient player)

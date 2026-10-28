@@ -14,6 +14,9 @@
 # BOT_DAMAGE      multiplier of the damage bots deal to players, 0.1 to 5   (default: 1)
 # BOT_ACCURACY    multiplier of bot accuracy, 0.1 to 5                       (default: 1)
 #                 Admins can change the bots live with /bots, /difficulte, /botdegats, /botprecision.
+# BOT_JUNK        scrap (currency of weapon upgrades) carried by open world bots, 0 to 10 (default: 1)
+# EVENT_MINUTES   minutes between open world events (air drops, bosses), 0 disables  (default: 20)
+#                 Admins can start them with /largage and /boss.
 # XP_MULTIPLIER   multiplier of the experience players earn, 0.1 to 20       (default: 1)
 # BOT_DEBUG       set to anything to log what every bot is doing
 # REGISTRATION    open: logging in with a new name creates the account; closed: no new accounts

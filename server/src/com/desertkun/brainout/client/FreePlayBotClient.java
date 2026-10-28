@@ -11,6 +11,7 @@ import com.desertkun.brainout.content.shop.Slot;
 import com.desertkun.brainout.data.Map;
 import com.desertkun.brainout.data.active.PlayerData;
 import com.desertkun.brainout.data.components.BotControllerComponentData;
+import com.desertkun.brainout.mode.ServerFreeRealization;
 import com.desertkun.brainout.server.ServerController;
 
 /**
@@ -22,6 +23,10 @@ public class FreePlayBotClient extends BotClient
     private BotDifficulty difficulty = BotDifficulty.normal;
     // difficulty and gear picked at every spawn from the players around, see BotThreat
     private boolean adaptive;
+    // a heavily armed bot of an open world event, roaming outside until someone kills it
+    private boolean boss;
+    // a dead boss does not come back: it waits to be removed
+    private boolean retired;
 
     public FreePlayBotClient(int id, ServerController serverController)
     {
@@ -59,10 +64,36 @@ public class FreePlayBotClient extends BotClient
         this.adaptive = adaptive;
     }
 
+    public boolean isBoss()
+    {
+        return boss;
+    }
+
+    public void setBoss(boolean boss)
+    {
+        this.boss = boss;
+    }
+
+    public boolean isRetired()
+    {
+        return retired;
+    }
+
+    public void retire()
+    {
+        retired = true;
+    }
+
+    @Override
+    public String getName()
+    {
+        return boss ? "BOSS " + super.getName() : super.getName();
+    }
+
     @Override
     protected float spawnCheckTimer()
     {
-        return MathUtils.random(30.f, 60.f);
+        return boss ? 1.0f : MathUtils.random(30.f, 60.f);
     }
 
     @Override
@@ -80,6 +111,12 @@ public class FreePlayBotClient extends BotClient
     @Override
     protected boolean isMapOkayToSpawn(Map map)
     {
+        if (retired)
+            return false;
+
+        if (boss)
+            return ServerFreeRealization.IsOutdoor(map.getDimension());
+
         return !map.isSafeMap();
     }
 

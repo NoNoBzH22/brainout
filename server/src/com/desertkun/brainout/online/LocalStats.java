@@ -9,7 +9,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.IsoFields;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -19,11 +23,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * Statistics and ranking of everyone playing on a private server, shown by the game's stats menu.
  *
  * Mounted on the server's HTTP port under /private/stats, needs a session token (access_token):
- *   GET /private/stats   {"me": name, "players": [{name, online, stats...}]}
+ *   GET /private/stats   {"me": name, "players": [{name, online, stats..., week: {...}}],
+ *                         "challenges": [...], "weekEnds": millis, "lastWeek": [{challenge, name, value}]}
  *
  * The games of a server (lobby, open world, deathmatch...) run in separate processes sharing the
  * data directory: each one writes who plays on it to online-<mode>.json every few seconds, so any
  * of them can tell where everyone is.
+ *
+ * Weekly challenges compare what everyone did since Monday: the stats of each account are noted
+ * the first time it is seen in a week (weekly-<week>.json), the progress is the difference.
  */
 public class LocalStats implements HttpHandler
 {
@@ -50,6 +58,17 @@ public class LocalStats implements HttpHandler
         {"ru", "ru"},
     };
 
+    // weekly challenges: name shown, value in the "week" object of each player
+    public static final String[][] CHALLENGES = {
+        {"Le plus de kills", "kills"},
+        {"Le plus de tirs a la tete", "headshots"},
+        {"Le plus de sorties du monde ouvert", "fpExits"},
+        {"Le plus de kills en monde ouvert", "fpKills"},
+        {"Le plus de temps de jeu (minutes)", "minutes"},
+    };
+
+    private static final ZoneId ZONE = ZoneId.of("Europe/Paris");
+
     private static final Set<String> online = ConcurrentHashMap.newKeySet();
     private static Timer timer;
 
@@ -57,6 +76,76 @@ public class LocalStats implements HttpHandler
     {
         online.add(account);
         WriteOnline();
+
+        // the week's progress counts from here if this is the player's first game this week
+        JSONObject profile = AccountStore.Get().loadProfile(account);
+        if (profile != null)
+        {
+            Baseline(WeekKey(LocalDate.now(ZONE)), account, Stats(profile), true);
+        }
+    }
+
+    private static String WeekKey(LocalDate date)
+    {
+        return date.get(IsoFields.WEEK_BASED_YEAR) + "-" + date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+    }
+
+    /** Next Monday at midnight, when the challenges start over. */
+    private static long WeekEnds()
+    {
+        LocalDate monday = LocalDate.now(ZONE).with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+        return monday.atStartOfDay(ZONE).toInstant().toEpochMilli();
+    }
+
+    /** The stats an account had when first seen in the given week, noted now if missing and create is set. */
+    private static synchronized JSONObject Baseline(String week, String account, JSONObject current, boolean create)
+    {
+        AccountStore accounts = AccountStore.Get();
+        String file = "weekly-" + week + ".json";
+        JSONObject all = accounts.loadShared(file);
+        if (all == null)
+            all = new JSONObject();
+
+        String key = account.toLowerCase();
+        JSONObject baseline = all.optJSONObject(key);
+
+        if (baseline == null && create && current != null)
+        {
+            baseline = current;
+            all.put(key, baseline);
+            accounts.saveShared(file, all);
+        }
+
+        return baseline;
+    }
+
+    private static JSONObject Stats(JSONObject profile)
+    {
+        JSONObject stats = profile.optJSONObject("stats");
+        if (stats == null)
+            stats = new JSONObject();
+
+        JSONObject result = new JSONObject();
+
+        for (String[] stat : STATS)
+        {
+            result.put(stat[1], (long) stats.optDouble(stat[0], 0));
+        }
+
+        return result;
+    }
+
+    private static JSONObject Difference(JSONObject now, JSONObject before)
+    {
+        JSONObject result = new JSONObject();
+
+        for (String[] challenge : CHALLENGES)
+        {
+            long value = now.optLong(challenge[1]) - (before != null ? before.optLong(challenge[1]) : now.optLong(challenge[1]));
+            result.put(challenge[1], Math.max(0, value));
+        }
+
+        return result;
     }
 
     public static void PlayerLeft(String account)
@@ -123,9 +212,7 @@ public class LocalStats implements HttpHandler
                 return;
             }
 
-            respond(exchange, 200, new JSONObject()
-                .put("me", accounts.getDisplayName(me))
-                .put("players", players(accounts)));
+            respond(exchange, 200, Snapshot().put("me", accounts.getDisplayName(me)));
         }
         catch (Exception e)
         {
@@ -133,8 +220,11 @@ public class LocalStats implements HttpHandler
         }
     }
 
-    private static JSONArray players(AccountStore accounts)
+    /** Everyone's stats, where they play and their progress in the week's challenges. */
+    public static JSONObject Snapshot()
     {
+        AccountStore accounts = AccountStore.Get();
+
         // where everyone plays right now
         JSONObject where = new JSONObject();
         long now = System.currentTimeMillis();
@@ -155,25 +245,23 @@ public class LocalStats implements HttpHandler
             }
         }
 
-        JSONArray result = new JSONArray();
-        List<Object[]> profiles = accounts.listProfiles();
+        LocalDate today = LocalDate.now(ZONE);
+        String week = WeekKey(today);
+        String lastWeek = WeekKey(today.minusWeeks(1));
 
-        for (Object[] entry : profiles)
+        JSONArray players = new JSONArray();
+        // last week's progress: from last week's baseline to this week's one
+        JSONObject lastWeekProgress = new JSONObject();
+
+        for (Object[] entry : accounts.listProfiles())
         {
             String name = (String) entry[0];
             JSONObject profile = (JSONObject) entry[1];
-            JSONObject stats = profile.optJSONObject("stats");
-            if (stats == null)
-                stats = new JSONObject();
+            JSONObject stats = Stats(profile);
 
-            JSONObject player = new JSONObject();
+            JSONObject player = new JSONObject(stats.toString());
             player.put("name", name);
             player.put("online", where.optString(name.toLowerCase(), ""));
-
-            for (String[] stat : STATS)
-            {
-                player.put(stat[1], (long) stats.optDouble(stat[0], 0));
-            }
 
             int achievements = 0;
             JSONObject items = profile.optJSONObject("items");
@@ -187,10 +275,49 @@ public class LocalStats implements HttpHandler
             }
             player.put("achievements", achievements);
 
-            result.put(player);
+            JSONObject baseline = Baseline(week, name, stats, true);
+            player.put("week", Difference(stats, baseline));
+
+            JSONObject before = Baseline(lastWeek, name, null, false);
+            if (before != null && baseline != null)
+            {
+                lastWeekProgress.put(name, Difference(baseline, before));
+            }
+
+            players.put(player);
         }
 
-        return result;
+        JSONArray challenges = new JSONArray();
+        JSONArray winners = new JSONArray();
+
+        for (String[] challenge : CHALLENGES)
+        {
+            challenges.put(new JSONObject().put("title", challenge[0]).put("stat", challenge[1]));
+
+            String best = null;
+            long bestValue = 0;
+
+            for (String name : lastWeekProgress.keySet())
+            {
+                long value = lastWeekProgress.getJSONObject(name).optLong(challenge[1]);
+                if (value > bestValue)
+                {
+                    best = name;
+                    bestValue = value;
+                }
+            }
+
+            if (best != null)
+            {
+                winners.put(new JSONObject().put("challenge", challenge[0]).put("name", best).put("value", bestValue));
+            }
+        }
+
+        return new JSONObject()
+            .put("players", players)
+            .put("challenges", challenges)
+            .put("weekEnds", WeekEnds())
+            .put("lastWeek", winners);
     }
 
     private static void respond(HttpExchange exchange, int code, JSONObject body) throws IOException

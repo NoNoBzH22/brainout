@@ -187,6 +187,26 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
     private int freeplayBots;
     private String freeplayBotsDifficulty;
 
+    // scrap (the currency of weapon upgrades) carried by bots: 0 none, 1 normal, 2 twice as much
+    private static final float BOT_JUNK = EnvFloat("BOT_JUNK", 1.0f, 0.0f, 10.0f);
+    // minutes between two open world events (air drops, bosses), 0 disables them
+    private static final float EVENT_MINUTES = EnvFloat("EVENT_MINUTES", 20.0f, 0.0f, 1440.0f);
+    // part of the damage a boss really takes
+    private static final float BOSS_DAMAGE_TAKEN = 0.4f;
+
+    private static float EnvFloat(String name, float def, float min, float max)
+    {
+        try
+        {
+            String value = System.getenv(name);
+            return value != null ? MathUtils.clamp(Float.parseFloat(value), min, max) : def;
+        }
+        catch (NumberFormatException e)
+        {
+            return def;
+        }
+    }
+
     public ServerFreeRealization(GameModeFree gameMode)
     {
         super(gameMode);
@@ -1605,6 +1625,12 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         scheduleTask(this::spawnCrows, 2000, 2000);
         scheduleTask(this::ensureFreeplayBots, 15000, 10000);
         scheduleTask(this::sendSquadPositions, 1000, 1000);
+
+        if (EVENT_MINUTES > 0)
+        {
+            long period = (long)(EVENT_MINUTES * 60000);
+            scheduleTask(this::randomEvent, period, period);
+        }
         //scheduleTask(this::spawnZombies, 1000, 1000);
 
         //spawnSnow();
@@ -2085,7 +2111,7 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
         for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
         {
-            if (entry.value instanceof FreePlayBotClient)
+            if (entry.value instanceof FreePlayBotClient && !((FreePlayBotClient) entry.value).isBoss())
             {
                 bots.add(((FreePlayBotClient) entry.value));
             }
@@ -3234,7 +3260,11 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
                 poc.getConsumableContainer().addRecord(record);
 
-                if (client instanceof FreePlayBotClient && ((FreePlayBotClient) client).isAdaptive())
+                if (client instanceof FreePlayBotClient && ((FreePlayBotClient) client).isBoss())
+                {
+                    equipBoss(((FreePlayBotClient) client), player, poc);
+                }
+                else if (client instanceof FreePlayBotClient && ((FreePlayBotClient) client).isAdaptive())
                 {
                     equipAdaptiveBot(((FreePlayBotClient) client), player, poc);
                 }
@@ -3249,8 +3279,172 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
                         RandomAmmo.generate(this, poc.getConsumableContainer());
                     }
                 }
+
+                // killing bots is a way to get scrap for weapon upgrades
+                if (!(client instanceof FreePlayBotClient && ((FreePlayBotClient) client).isBoss()))
+                {
+                    giveJunk(poc.getConsumableContainer(), MathUtils.random(0, 2));
+                }
             }
         }
+    }
+
+    private void giveJunk(ConsumableContainer cnt, int pieces)
+    {
+        int amount = Math.round(pieces * BOT_JUNK);
+
+        for (int i = 0; i < amount; i++)
+        {
+            OtherConsumables.generateJunk(this, cnt);
+        }
+    }
+
+    private void equipBoss(FreePlayBotClient boss, PlayerData player, PlayerOwnerComponent poc)
+    {
+        boss.setDifficulty(BotDifficulty.nightmare);
+
+        ConsumableContainer cnt = poc.getConsumableContainer();
+
+        PrimaryWeaponAndAmmo.generate(this, cnt, player.getDimension(), player);
+        SecondaryWeaponAndAmmo.generate(this, cnt, player.getDimension(), player);
+        RandomAmmo.generate(this, cnt);
+        RandomAmmo.generate(this, cnt);
+        SpecialInstruments.generate(this, cnt, player.getDimension());
+        OtherConsumables.generate(this, cnt);
+        OtherConsumables.generate(this, cnt);
+        OtherConsumables.generate(this, cnt);
+        giveJunk(cnt, MathUtils.random(6, 10));
+
+        if (Log.INFO) Log.info("Boss " + boss.getName() + " equipped in " + player.getDimension());
+
+        Announce("Un BOSS lourdement arme rode dans " + ZoneName(player.getDimension()) +
+            " ! Il porte beaucoup de ferraille. Abattez-le !");
+    }
+
+    // ---- open world events -------------------------------------------------------------------
+
+    private static String ZoneName(String dimension)
+    {
+        switch (dimension)
+        {
+            case "forest":
+                return "la foret";
+            case "swamp2":
+                return "le marais";
+            default:
+                return "la zone principale";
+        }
+    }
+
+    public static void Announce(String text)
+    {
+        for (ObjectMap.Entry<Integer, Client> entry : new ObjectMap.Entries<>(BrainOutServer.Controller.getClients()))
+        {
+            if (entry.value instanceof PlayerClient)
+            {
+                ((PlayerClient) entry.value).sendSystemMessage(text);
+            }
+        }
+    }
+
+    private boolean anyPlayerInWorld()
+    {
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        {
+            if (entry.value instanceof PlayerClient && entry.value.isAlive())
+                return true;
+        }
+
+        return false;
+    }
+
+    private FreePlayBotClient findBoss()
+    {
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        {
+            if (entry.value instanceof FreePlayBotClient && ((FreePlayBotClient) entry.value).isBoss() &&
+                !((FreePlayBotClient) entry.value).isRetired())
+                return ((FreePlayBotClient) entry.value);
+        }
+
+        return null;
+    }
+
+    private void randomEvent()
+    {
+        // EVENT_DEBUG: events even with nobody around, to test them
+        if (!anyPlayerInWorld() && System.getenv("EVENT_DEBUG") == null)
+            return;
+
+        if (findBoss() == null && MathUtils.randomBoolean(0.4f))
+        {
+            spawnBoss();
+        }
+        else
+        {
+            startAirDrop();
+        }
+    }
+
+    /** A helicopter drops weapons over an outdoor zone, preferably one with players in it. */
+    public boolean startAirDrop()
+    {
+        Array<Map> withPlayers = new Array<>();
+        Array<Map> outdoor = new Array<>();
+
+        for (String dimension : OUTDOOR_DIMENSIONS)
+        {
+            Map map = Map.Get(dimension);
+            if (map != null)
+            {
+                outdoor.add(map);
+            }
+        }
+
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        {
+            if (!(entry.value instanceof PlayerClient) || entry.value.getPlayerData() == null)
+                continue;
+
+            Map map = entry.value.getPlayerData().getMap();
+            if (map != null && outdoor.contains(map, true) && !withPlayers.contains(map, true))
+            {
+                withPlayers.add(map);
+            }
+        }
+
+        Map map = withPlayers.size > 0 ? withPlayers.random() : outdoor.random();
+
+        if (map == null || dropOff == null)
+            return false;
+
+        float x = MathUtils.random(96.0f, Math.max(97.0f, map.getWidth() - 96.0f));
+        requestDropOff(map, x, 0, "green");
+        if (Log.INFO) Log.info("Air drop over " + map.getDimension() + " at " + (int) x);
+
+        String side = x < map.getWidth() / 3.0f ? "a l'ouest de " : x > map.getWidth() * 2.0f / 3.0f ? "a l'est de " : "au centre de ";
+        Announce("Largage d'armes en approche " + side + ZoneName(map.getDimension()) + " ! Premier arrive, premier servi.");
+        return true;
+    }
+
+    /** A heavily armed bot appears outside; whoever kills it gets its loot. */
+    public boolean spawnBoss()
+    {
+        if (findBoss() != null)
+            return false;
+
+        Team team = BrainOutServer.ContentMgr.get("team-freeplay", Team.class);
+        if (team == null)
+            return false;
+
+        FreePlayBotClient boss = ((FreePlayBotClient) BrainOutServer.Controller.getClients().newFreePlayBotClient(team));
+        boss.setBoss(true);
+        boss.setAdaptive(false);
+        boss.setDifficulty(BotDifficulty.nightmare);
+        boss.init();
+
+        if (Log.INFO) Log.info("Boss " + boss.getName() + " spawned");
+        return true;
     }
 
     // gear and skill matching the players around: see BotThreat
@@ -3347,7 +3541,7 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
     public static final String[] OUTDOOR_DIMENSIONS = {"default", "forest", "swamp2"};
 
-    private static boolean IsOutdoor(String dimension)
+    public static boolean IsOutdoor(String dimension)
     {
         for (String outdoor : OUTDOOR_DIMENSIONS)
         {
@@ -4058,6 +4252,11 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
             dmg *= difficulty.damageToPlayers * BotTuning.getDamage();
         }
 
+        if (receiver instanceof FreePlayBotClient && ((FreePlayBotClient) receiver).isBoss())
+        {
+            dmg *= BOSS_DAMAGE_TAKEN;
+        }
+
         return super.calculateDamage(receiverTeam, senderTeam, receiverId, senderId, dmg);
     }
 
@@ -4080,6 +4279,25 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         if (client instanceof FreePlayBotClient)
         {
             BotThreat.botKilledBy(killer);
+
+            FreePlayBotClient bot = ((FreePlayBotClient) client);
+            if (bot.isBoss())
+            {
+                Announce(killer instanceof PlayerClient ?
+                    killer.getName() + " a abattu le boss ! Son butin est au sol." :
+                    "Le boss est tombe. Son butin est au sol.");
+
+                // a boss lives once
+                bot.retire();
+                BrainOutServer.Timer.schedule(new TimerTask()
+                {
+                    @Override
+                    public void run()
+                    {
+                        BrainOutServer.PostRunnable(() -> BrainOutServer.Controller.getClients().releaseClient(bot));
+                    }
+                }, 5000);
+            }
         }
         else if (client instanceof PlayerClient)
         {
