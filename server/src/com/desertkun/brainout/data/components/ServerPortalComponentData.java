@@ -71,10 +71,6 @@ public class ServerPortalComponentData extends Component<ServerPortalComponent> 
     {
         PlayerClient playerClient = client instanceof PlayerClient ? ((PlayerClient) client) : null;
 
-        if (playerClient == null)
-        {
-            if (Log.INFO) Log.info("playerClient == null");
-        }
 
         final PortalData otherPortal = findOtherPortal();
 
