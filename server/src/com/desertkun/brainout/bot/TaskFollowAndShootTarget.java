@@ -139,7 +139,7 @@ public class TaskFollowAndShootTarget extends Task
                     randomness = 8f;
                 }
 
-                if (getController().lerpAngle(targetAngle + MathUtils.random(-randomness, randomness) * getController().getDifficulty().aimSpread))
+                if (getController().lerpAngle(targetAngle + MathUtils.random(-randomness, randomness) * getController().getDifficulty().aimSpread * BotTuning.getSpread()))
                 {
                     fireTimer -= dt;
                     if (fireTimer <= 0)

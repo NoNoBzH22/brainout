@@ -4,6 +4,9 @@
 # PORT            tcp port; udp uses PORT+1 and http PORT+2      (default: 36555)
 # BOTS            player-like bots roaming the world             (default: 8)
 # BOT_DIFFICULTY  adaptive (matches the players around), easy, normal, hard, nightmare or mix (default: adaptive)
+# BOT_DAMAGE      multiplier of the damage bots deal to players, 0.1 to 5   (default: 1)
+# BOT_ACCURACY    multiplier of bot accuracy, 0.1 to 5                       (default: 1)
+#                 Admins can change the bots live with /bots, /difficulte, /botdegats, /botprecision.
 # BOT_DEBUG       set to anything to log what every bot is doing
 # REGISTRATION    open: logging in with a new name creates the account; closed: no new accounts
 # ALLOWED_ACCOUNTS  comma separated names allowed to create an account (default: anyone)

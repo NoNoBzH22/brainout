@@ -9,6 +9,7 @@ import com.desertkun.brainout.BrainOut;
 import com.desertkun.brainout.BrainOutServer;
 import com.desertkun.brainout.Constants;
 import com.desertkun.brainout.bot.BotDifficulty;
+import com.desertkun.brainout.bot.BotTuning;
 import com.desertkun.brainout.bot.Task;
 import com.desertkun.brainout.bot.TaskCrow;
 import com.desertkun.brainout.bot.freeplay.TaskFreePlay;
@@ -2010,6 +2011,11 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         return hour < Constants.Core.SECONDS_IN_A_DAY;
     }
 
+    public int getTimeOfDayOffset()
+    {
+        return (int) timeOfDayOffset;
+    }
+
     public void setTimeOfDayOffset(int offset)
     {
         timeOfDayOffset = offset;
@@ -2031,6 +2037,48 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         BrainOutServer.Timer.schedule(task, delay, repeat);
     }
 
+    public int getFreeplayBots()
+    {
+        return freeplayBots;
+    }
+
+    public void setFreeplayBots(int amount)
+    {
+        freeplayBots = Math.max(0, Math.min(64, amount));
+        ensureFreeplayBots();
+    }
+
+    public String getFreeplayBotsDifficulty()
+    {
+        return IsAdaptive(freeplayBotsDifficulty) ? "adaptive" : freeplayBotsDifficulty.trim().toLowerCase();
+    }
+
+    private static boolean IsAdaptive(String difficulty)
+    {
+        return difficulty == null || difficulty.trim().isEmpty() || difficulty.trim().equalsIgnoreCase("adaptive");
+    }
+
+    /** Applies a new difficulty to the bots in the world and the ones to come. */
+    public void setFreeplayBotsDifficulty(String difficulty)
+    {
+        freeplayBotsDifficulty = difficulty;
+        boolean adaptive = IsAdaptive(difficulty);
+
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
+        {
+            if (!(entry.value instanceof FreePlayBotClient))
+                continue;
+
+            FreePlayBotClient bot = ((FreePlayBotClient) entry.value);
+            bot.setAdaptive(adaptive);
+
+            if (!adaptive)
+            {
+                bot.setDifficulty(BotDifficulty.parse(difficulty));
+            }
+        }
+    }
+
     private void ensureFreeplayBots()
     {
         Array<FreePlayBotClient> bots = new Array<>();
@@ -2048,8 +2096,7 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         while (bots.size < freeplayBots && team != null)
         {
             FreePlayBotClient bot = ((FreePlayBotClient) BrainOutServer.Controller.getClients().newFreePlayBotClient(team));
-            boolean adaptive = freeplayBotsDifficulty == null || freeplayBotsDifficulty.trim().isEmpty() ||
-                freeplayBotsDifficulty.trim().equalsIgnoreCase("adaptive");
+            boolean adaptive = IsAdaptive(freeplayBotsDifficulty);
             bot.setAdaptive(adaptive);
             bot.setDifficulty(adaptive ? BotDifficulty.normal : BotDifficulty.parse(freeplayBotsDifficulty));
             bot.init();
@@ -4008,7 +4055,7 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
                 }
             }
 
-            dmg *= difficulty.damageToPlayers;
+            dmg *= difficulty.damageToPlayers * BotTuning.getDamage();
         }
 
         return super.calculateDamage(receiverTeam, senderTeam, receiverId, senderId, dmg);

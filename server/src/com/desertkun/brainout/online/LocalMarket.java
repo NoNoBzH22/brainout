@@ -27,7 +27,11 @@ import java.util.regex.Pattern;
  *
  * Each account's items live in DATA_DIR/<account>/market-<market>.json. Updates are batches of
  * amount changes applied all or nothing, and an item's amount never goes below zero, so nothing
- * can be taken out that was not put in. Player to player orders are not supported.
+ * can be taken out that was not put in.
+ *
+ * Orders (players selling to each other) live in DATA_DIR/market-orders-<market>.json. Posting one
+ * moves the items on sale out of the seller's storage until the order is fulfilled, cancelled or
+ * expires; fulfilling takes the price from the buyer's storage and gives it to the seller.
  *
  * Mounted on the server's HTTP port under /anthill/market, it mirrors the official API:
  *   GET  /markets/{market}                 settings
@@ -35,7 +39,12 @@ import java.util.regex.Pattern;
  *   POST /markets/{market}/items           items=[{name, amount, payload}] amount changes
  *   GET  /markets/{market}/items/{item}    amount of the item with the given payload
  *   POST /markets/{market}/items/{item}    payload, amount: one amount change
- *   GET  /markets/{market}/orders[/my]     always empty
+ *   GET  /markets/{market}/orders          orders on sale, filtered like the official API
+ *   POST /markets/{market}/orders          post an order
+ *   GET  /markets/{market}/orders/my       the player's orders
+ *   GET  /markets/{market}/orders/{id}     one order
+ *   POST /markets/{market}/orders/{id}/fulfill   buy amount of it
+ *   POST /markets/{market}/orders/{id}/delete    cancel it, the rest goes back to the seller
  */
 public class LocalMarket implements HttpHandler
 {
@@ -117,14 +126,63 @@ public class LocalMarket implements HttpHandler
                 }
                 case "orders":
                 {
-                    if ("GET".equalsIgnoreCase(exchange.getRequestMethod()))
+                    boolean post = "POST".equalsIgnoreCase(exchange.getRequestMethod());
+
+                    if (parts.length == 4)
                     {
-                        respond(exchange, 200, new JSONObject().put("orders", new JSONArray()));
+                        if (post)
+                        {
+                            JSONObject order = postOrder(account, market, form);
+                            if (order == null)
+                            {
+                                respond(exchange, 409, new JSONObject().put("error", "cannot post"));
+                            }
+                            else
+                            {
+                                respond(exchange, 200, new JSONObject()
+                                    .put("order_id", order.getString("order_id"))
+                                    .put("fulfilled_immediately", false));
+                            }
+                        }
+                        else
+                        {
+                            respond(exchange, 200, new JSONObject().put("orders", listOrders(market, query, null)));
+                        }
+                        return;
                     }
-                    else
+
+                    String orderId = parts[4];
+
+                    if (orderId.equals("my"))
                     {
-                        respond(exchange, 404, new JSONObject().put("error", "orders are not supported"));
+                        respond(exchange, 200, new JSONObject().put("orders", listOrders(market, new HashMap<>(), account)));
+                        return;
                     }
+
+                    if (parts.length == 5 && !post)
+                    {
+                        JSONObject order = getOrder(market, orderId);
+                        respond(exchange, order != null ? 200 : 404, order != null ? order : new JSONObject());
+                        return;
+                    }
+
+                    if (parts.length == 6 && post && parts[5].equals("fulfill"))
+                    {
+                        int amount = Integer.parseInt(form.getOrDefault("amount", "1"));
+                        boolean ok = fulfillOrder(account, market, orderId, amount);
+                        respond(exchange, ok ? 200 : 409, new JSONObject()
+                            .put("order_id", orderId).put("fulfilled_immediately", ok));
+                        return;
+                    }
+
+                    if (parts.length == 6 && post && parts[5].equals("delete"))
+                    {
+                        boolean ok = deleteOrder(account, market, orderId);
+                        respond(exchange, ok ? 200 : 404, new JSONObject());
+                        return;
+                    }
+
+                    respond(exchange, 404, new JSONObject());
                     return;
                 }
                 default:
@@ -138,6 +196,290 @@ public class LocalMarket implements HttpHandler
             if (Log.ERROR) Log.error("Market request failed: " + e);
             respond(exchange, 400, new JSONObject().put("error", "bad request"));
         }
+    }
+
+    private static final Object ORDERS_LOCK = new Object();
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
+    private static String ordersFile(String market)
+    {
+        return "market-orders-" + market + ".json";
+    }
+
+    // all orders of a market, expired ones returned to their sellers first
+    private static JSONArray loadOrders(String market)
+    {
+        JSONObject data = AccountStore.Get().loadShared(ordersFile(market));
+        JSONArray orders = data != null && data.optJSONArray("orders") != null ? data.getJSONArray("orders") : new JSONArray();
+
+        long now = System.currentTimeMillis();
+        JSONArray alive = new JSONArray();
+        boolean expired = false;
+
+        for (int i = 0; i < orders.length(); i++)
+        {
+            JSONObject order = orders.getJSONObject(i);
+
+            if (order.optLong("deadline_ms", Long.MAX_VALUE) < now)
+            {
+                returnToSeller(market, order);
+                expired = true;
+                continue;
+            }
+
+            alive.put(order);
+        }
+
+        if (expired)
+        {
+            saveOrders(market, alive);
+        }
+
+        return alive;
+    }
+
+    private static void saveOrders(String market, JSONArray orders)
+    {
+        AccountStore.Get().saveShared(ordersFile(market), new JSONObject().put("orders", orders));
+    }
+
+    private static void returnToSeller(String market, JSONObject order)
+    {
+        int rest = order.getInt("available") * order.getInt("give_amount");
+
+        if (rest > 0)
+        {
+            update(order.getString("owner_id"), market, new JSONArray().put(new JSONObject()
+                .put("name", order.getString("give_item"))
+                .put("amount", rest)
+                .put("payload", order.getJSONObject("give_payload"))));
+        }
+    }
+
+    private static JSONObject postOrder(String account, String market, Map<String, String> form)
+    {
+        String giveItem = form.get("give_item");
+        String takeItem = form.get("take_item");
+        int giveAmount = Integer.parseInt(form.getOrDefault("give_amount", "0"));
+        int takeAmount = Integer.parseInt(form.getOrDefault("take_amount", "0"));
+        int ordersAmount = Integer.parseInt(form.getOrDefault("orders_amount", "0"));
+
+        if (giveItem == null || takeItem == null || giveAmount <= 0 || takeAmount <= 0 ||
+            ordersAmount <= 0 || ordersAmount > 100000)
+            return null;
+
+        JSONObject givePayload = new JSONObject(form.getOrDefault("give_payload", "{}"));
+        JSONObject takePayload = new JSONObject(form.getOrDefault("take_payload", "{}"));
+        JSONObject payload = new JSONObject(form.getOrDefault("payload", "{}"));
+
+        long deadline = Long.MAX_VALUE;
+        try
+        {
+            if (form.containsKey("deadline"))
+            {
+                // same (12 hour, local time) format the game sends; off by at most half a day
+                deadline = new java.text.SimpleDateFormat("yyyy-MM-dd hh:mm:ss").parse(form.get("deadline")).getTime();
+            }
+        }
+        catch (Exception ignored)
+        {
+            // keep the order until it is fulfilled or cancelled
+        }
+
+        synchronized (ORDERS_LOCK)
+        {
+            JSONArray orders = loadOrders(market);
+
+            // the items on sale leave the seller's storage while the order is up
+            if (!update(account, market, new JSONArray().put(new JSONObject()
+                .put("name", giveItem).put("amount", -giveAmount * ordersAmount).put("payload", givePayload))))
+                return null;
+
+            byte[] id = new byte[12];
+            RANDOM.nextBytes(id);
+
+            JSONObject order = new JSONObject()
+                .put("order_id", java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(id))
+                .put("owner_id", account)
+                .put("give_item", giveItem)
+                .put("give_amount", giveAmount)
+                .put("give_payload", givePayload)
+                .put("take_item", takeItem)
+                .put("take_amount", takeAmount)
+                .put("take_payload", takePayload)
+                .put("available", ordersAmount)
+                .put("payload", payload)
+                .put("deadline_ms", deadline);
+
+            orders.put(order);
+            saveOrders(market, orders);
+
+            if (Log.INFO) Log.info("Market " + market + ": " + account + " sells " + ordersAmount + " x " +
+                giveAmount + " " + giveItem + " for " + takeAmount + " " + takeItem + " each");
+
+            return order;
+        }
+    }
+
+    private static JSONObject getOrder(String market, String orderId)
+    {
+        synchronized (ORDERS_LOCK)
+        {
+            JSONArray orders = loadOrders(market);
+            for (int i = 0; i < orders.length(); i++)
+            {
+                if (orders.getJSONObject(i).getString("order_id").equals(orderId))
+                    return orders.getJSONObject(i);
+            }
+        }
+
+        return null;
+    }
+
+    private static boolean compare(int value, String comparison, int to)
+    {
+        switch (comparison)
+        {
+            case ">": return value > to;
+            case "<": return value < to;
+            case ">=": return value >= to;
+            case "<=": return value <= to;
+            default: return value == to;
+        }
+    }
+
+    private static JSONArray listOrders(String market, Map<String, String> query, String onlyOwner)
+    {
+        List<JSONObject> matching = new ArrayList<>();
+
+        synchronized (ORDERS_LOCK)
+        {
+            JSONArray orders = loadOrders(market);
+
+            for (int i = 0; i < orders.length(); i++)
+            {
+                JSONObject order = orders.getJSONObject(i);
+
+                String owner = onlyOwner != null ? onlyOwner : query.get("owner_id");
+                if (owner != null && !owner.equalsIgnoreCase(order.getString("owner_id")))
+                    continue;
+                if (query.containsKey("give_item") && !query.get("give_item").equals(order.getString("give_item")))
+                    continue;
+                if (query.containsKey("take_item") && !query.get("take_item").equals(order.getString("take_item")))
+                    continue;
+                if (query.containsKey("give_payload") &&
+                    !canonical(new JSONObject(query.get("give_payload"))).equals(canonical(order.getJSONObject("give_payload"))))
+                    continue;
+                if (query.containsKey("give_amount") && !compare(order.getInt("give_amount"),
+                    query.getOrDefault("give_amount_comparison", "="), Integer.parseInt(query.get("give_amount"))))
+                    continue;
+                if (query.containsKey("take_amount") && !compare(order.getInt("take_amount"),
+                    query.getOrDefault("take_amount_comparison", "="), Integer.parseInt(query.get("take_amount"))))
+                    continue;
+
+                matching.add(order);
+            }
+        }
+
+        String sortBy = query.get("sort_by");
+        if (sortBy != null && (sortBy.equals("give_amount") || sortBy.equals("take_amount")))
+        {
+            boolean desc = "true".equals(query.get("sort_desc"));
+            matching.sort((a, b) -> desc ? b.getInt(sortBy) - a.getInt(sortBy) : a.getInt(sortBy) - b.getInt(sortBy));
+        }
+
+        int offset = Integer.parseInt(query.getOrDefault("offset", "0"));
+        int limit = Integer.parseInt(query.getOrDefault("limit", "1000"));
+
+        JSONArray result = new JSONArray();
+        for (int i = Math.max(0, offset); i < matching.size() && result.length() < limit; i++)
+        {
+            result.put(matching.get(i));
+        }
+
+        return result;
+    }
+
+    private static boolean fulfillOrder(String buyer, String market, String orderId, int amount)
+    {
+        if (amount <= 0)
+            return false;
+
+        synchronized (ORDERS_LOCK)
+        {
+            JSONArray orders = loadOrders(market);
+
+            for (int i = 0; i < orders.length(); i++)
+            {
+                JSONObject order = orders.getJSONObject(i);
+                if (!order.getString("order_id").equals(orderId))
+                    continue;
+
+                String seller = order.getString("owner_id");
+                if (seller.equalsIgnoreCase(buyer) || order.getInt("available") < amount)
+                    return false;
+
+                // the buyer pays and gets the items in one go, or nothing happens
+                if (!update(buyer, market, new JSONArray()
+                    .put(new JSONObject()
+                        .put("name", order.getString("take_item"))
+                        .put("amount", -order.getInt("take_amount") * amount)
+                        .put("payload", order.getJSONObject("take_payload")))
+                    .put(new JSONObject()
+                        .put("name", order.getString("give_item"))
+                        .put("amount", order.getInt("give_amount") * amount)
+                        .put("payload", order.getJSONObject("give_payload")))))
+                    return false;
+
+                update(seller, market, new JSONArray().put(new JSONObject()
+                    .put("name", order.getString("take_item"))
+                    .put("amount", order.getInt("take_amount") * amount)
+                    .put("payload", order.getJSONObject("take_payload"))));
+
+                int left = order.getInt("available") - amount;
+                if (left > 0)
+                {
+                    order.put("available", left);
+                }
+                else
+                {
+                    orders.remove(i);
+                }
+
+                saveOrders(market, orders);
+
+                if (Log.INFO) Log.info("Market " + market + ": " + buyer + " bought " + amount + " of " + seller + "'s " +
+                    order.getString("give_item"));
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean deleteOrder(String account, String market, String orderId)
+    {
+        synchronized (ORDERS_LOCK)
+        {
+            JSONArray orders = loadOrders(market);
+
+            for (int i = 0; i < orders.length(); i++)
+            {
+                JSONObject order = orders.getJSONObject(i);
+                if (!order.getString("order_id").equals(orderId))
+                    continue;
+
+                if (!order.getString("owner_id").equalsIgnoreCase(account))
+                    return false;
+
+                returnToSeller(market, order);
+                orders.remove(i);
+                saveOrders(market, orders);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // stored as {"items": [{name, amount, payload}]}, one entry per name and payload

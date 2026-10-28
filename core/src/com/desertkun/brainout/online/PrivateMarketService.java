@@ -16,7 +16,6 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -25,9 +24,9 @@ import java.util.concurrent.Executors;
 /**
  * The market service as served by a private game server (the server's LocalMarket).
  *
- * Writes go through the original implementation. Reads are redone here: the original only reads
- * a response whose header is spelled exactly "Content-Type", and the HTTP server built into Java
- * spells it "Content-type".
+ * Item updates go through the original implementation. Everything that reads a response is redone
+ * here: the original only reads a response whose header is spelled exactly "Content-Type", and the
+ * HTTP server built into Java spells it "Content-type".
  */
 public class PrivateMarketService extends MarketService
 {
@@ -66,12 +65,49 @@ public class PrivateMarketService extends MarketService
 
     private void get(String path, LoginService.AccessToken accessToken, String extraQuery, ResultHandler handler)
     {
+        request(path, accessToken, extraQuery, null, handler);
+    }
+
+    private void post(String path, LoginService.AccessToken accessToken, String form, ResultHandler handler)
+    {
+        request(path, accessToken, null, form != null ? form : "", handler);
+    }
+
+    private static String form(Object... keysAndValues)
+    {
+        StringBuilder out = new StringBuilder();
+
+        try
+        {
+            for (int i = 0; i + 1 < keysAndValues.length; i += 2)
+            {
+                if (keysAndValues[i + 1] == null)
+                    continue;
+
+                if (out.length() > 0)
+                    out.append("&");
+
+                out.append(keysAndValues[i]).append("=")
+                    .append(URLEncoder.encode(String.valueOf(keysAndValues[i + 1]), "UTF-8"));
+            }
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+
+        return out.toString();
+    }
+
+    private void request(String path, LoginService.AccessToken accessToken, String extraQuery, String postForm,
+                         ResultHandler handler)
+    {
         EXECUTOR.execute(() ->
         {
             try
             {
                 String query = "access_token=" + URLEncoder.encode(accessToken != null ? accessToken.get() : "", "UTF-8");
-                if (extraQuery != null)
+                if (extraQuery != null && !extraQuery.isEmpty())
                 {
                     query += "&" + extraQuery;
                 }
@@ -79,6 +115,16 @@ public class PrivateMarketService extends MarketService
                 HttpURLConnection connection = (HttpURLConnection) new URL(getLocation() + path + "?" + query).openConnection();
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(20000);
+
+                if (postForm != null)
+                {
+                    byte[] body = postForm.getBytes(StandardCharsets.UTF_8);
+                    connection.setRequestMethod("POST");
+                    connection.setDoOutput(true);
+                    connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                    connection.getOutputStream().write(body);
+                    connection.getOutputStream().close();
+                }
 
                 int status = connection.getResponseCode();
                 InputStream in = status < 400 ? connection.getInputStream() : connection.getErrorStream();
@@ -181,7 +227,56 @@ public class PrivateMarketService extends MarketService
             callback.complete(null, result, response != null ? response.optInt("amount", 0) : 0));
     }
 
-    // trading between players is not available on private servers
+    private static MarketOrderEntry parseOrder(JSONObject entry)
+    {
+        MarketOrderEntry e = new MarketOrderEntry();
+        e.orderId = entry.optString("order_id");
+        e.ownerId = entry.optString("owner_id");
+        e.giveItem = entry.optString("give_item");
+        e.takeItem = entry.optString("take_item");
+        e.giveAmount = entry.optInt("give_amount", 1);
+        e.takeAmount = entry.optInt("take_amount", 1);
+        e.available = entry.optInt("available", 1);
+        e.givePayload = entry.optJSONObject("give_payload");
+        e.takePayload = entry.optJSONObject("take_payload");
+        e.orderPayload = entry.optJSONObject("payload");
+        return e;
+    }
+
+    private static void completeOrders(ListMarketOrdersCallback callback, Request.Result result, JSONObject response)
+    {
+        JSONArray orders = response != null ? response.optJSONArray("orders") : null;
+
+        if (result != Request.Result.success || orders == null)
+        {
+            callback.complete(null, result == Request.Result.success ? Request.Result.failed : result, null);
+            return;
+        }
+
+        List<MarketOrderEntry> entries = new ArrayList<>();
+        for (int i = 0; i < orders.length(); i++)
+        {
+            JSONObject entry = orders.optJSONObject(i);
+            if (entry != null)
+            {
+                entries.add(parseOrder(entry));
+            }
+        }
+
+        callback.complete(null, result, entries);
+    }
+
+    private static String comparison(ListOrderComparison comparison)
+    {
+        switch (comparison)
+        {
+            case more: return ">";
+            case less: return "<";
+            case more_or_equal: return ">=";
+            case less_or_equal: return "<=";
+            default: return "=";
+        }
+    }
 
     @Override
     public void listOrders(String marketName, String ownerId, String giveItem, int giveAmount,
@@ -190,19 +285,50 @@ public class PrivateMarketService extends MarketService
                            MarkerEntriesOrder sortOrder, LoginService.AccessToken accessToken,
                            ListMarketOrdersCallback callback, int offset, int limit)
     {
-        callback.complete(null, Request.Result.success, Collections.emptyList());
+        boolean giveFilter = giveAmountComparison != null && giveAmountComparison != ListOrderComparison.none;
+        boolean takeFilter = takeAmountComparison != null && takeAmountComparison != ListOrderComparison.none;
+
+        String sortBy = null, sortDesc = null;
+        if (sortOrder != null)
+        {
+            switch (sortOrder)
+            {
+                case giveAmountAsc: sortBy = "give_amount"; sortDesc = "false"; break;
+                case giveAmountDesc: sortBy = "give_amount"; sortDesc = "true"; break;
+                case takeAmountAsc: sortBy = "take_amount"; sortDesc = "false"; break;
+                case takeAmountDesc: sortBy = "take_amount"; sortDesc = "true"; break;
+            }
+        }
+
+        String query = form(
+            "offset", offset, "limit", limit,
+            "owner_id", ownerId,
+            "give_item", giveItem,
+            "give_payload", givePayload,
+            "take_item", takeItem,
+            "take_payload", takePayload,
+            "give_amount", giveFilter ? giveAmount : null,
+            "give_amount_comparison", giveFilter ? comparison(giveAmountComparison) : null,
+            "take_amount", takeFilter ? takeAmount : null,
+            "take_amount_comparison", takeFilter ? comparison(takeAmountComparison) : null,
+            "sort_by", sortBy, "sort_desc", sortDesc);
+
+        get("/markets/" + marketName + "/orders", accessToken, query, (result, response) ->
+            completeOrders(callback, result, response));
     }
 
     @Override
     public void listMyOrders(String marketName, LoginService.AccessToken accessToken, ListMarketOrdersCallback callback)
     {
-        callback.complete(null, Request.Result.success, Collections.emptyList());
+        get("/markets/" + marketName + "/orders/my", accessToken, null, (result, response) ->
+            completeOrders(callback, result, response));
     }
 
     @Override
     public void getOrder(String marketName, String orderId, LoginService.AccessToken accessToken, GetMarketOrderCallback callback)
     {
-        callback.complete(null, Request.Result.notFound, null);
+        get("/markets/" + marketName + "/orders/" + orderId, accessToken, null, (result, response) ->
+            callback.complete(null, result, result == Request.Result.success && response != null ? parseOrder(response) : null));
     }
 
     @Override
@@ -210,19 +336,30 @@ public class PrivateMarketService extends MarketService
                           int takeAmount, JSONObject takePayload, int amount, JSONObject orderPayload,
                           java.util.Date deadline, LoginService.AccessToken accessToken, PostOrderCallback callback)
     {
-        callback.complete(null, Request.Result.notFound, null, false);
+        String body = form(
+            "give_item", giveItem, "give_amount", giveAmount, "give_payload", givePayload,
+            "take_item", takeItem, "take_amount", takeAmount, "take_payload", takePayload,
+            "orders_amount", amount, "payload", orderPayload,
+            "deadline", deadline != null ? new java.text.SimpleDateFormat("yyyy-MM-dd hh:mm:ss").format(deadline) : null);
+
+        post("/markets/" + marketName + "/orders", accessToken, body, (result, response) ->
+            callback.complete(null, result, response != null ? response.optString("order_id", null) : null,
+                response != null && response.optBoolean("fulfilled_immediately", false)));
     }
 
     @Override
     public void fulfillOrder(String marketName, String orderId, int fulfillAmount, LoginService.AccessToken accessToken,
                              PostOrderCallback callback)
     {
-        callback.complete(null, Request.Result.notFound, null, false);
+        post("/markets/" + marketName + "/orders/" + orderId + "/fulfill", accessToken, form("amount", fulfillAmount),
+            (result, response) -> callback.complete(null, result, orderId,
+                response != null && response.optBoolean("fulfilled_immediately", false)));
     }
 
     @Override
     public void deleteOrder(String marketName, String orderId, LoginService.AccessToken accessToken, DeleteOrderCallback callback)
     {
-        callback.complete(null, Request.Result.notFound);
+        post("/markets/" + marketName + "/orders/" + orderId + "/delete", accessToken, "", (result, response) ->
+            callback.complete(null, result));
     }
 }

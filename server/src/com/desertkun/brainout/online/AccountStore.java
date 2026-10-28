@@ -263,6 +263,30 @@ public class AccountStore
         write(new File(accountDir(key(name)), file), data.toString(2));
     }
 
+    /** Server wide JSON documents (not tied to an account), like the market orders. */
+    public synchronized JSONObject loadShared(String file)
+    {
+        File data = new File(root, file);
+
+        if (!data.isFile())
+            return null;
+
+        try
+        {
+            return new JSONObject(read(data));
+        }
+        catch (Exception e)
+        {
+            if (Log.ERROR) Log.error("Corrupted " + file + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    public synchronized void saveShared(String file, JSONObject data)
+    {
+        write(new File(root, file), data.toString(2));
+    }
+
     public synchronized void saveProfile(String name, JSONObject profile)
     {
         write(new File(accountDir(key(name)), "profile.json"), profile.toString(2));

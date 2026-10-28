@@ -1,6 +1,7 @@
 package com.desertkun.brainout.client;
 
 import com.desertkun.brainout.online.AccountStore;
+import com.desertkun.brainout.server.console.ChatCommands;
 import com.desertkun.brainout.online.LocalMarket;
 import com.desertkun.brainout.mode.GameMode;
 import com.desertkun.brainout.mode.ServerFreeRealization;
@@ -292,6 +293,12 @@ public class PlayerClient extends Client
         if (msg.text != null && msg.text.trim().toLowerCase().startsWith("/squad"))
         {
             BrainOutServer.PostRunnable(() -> squadCommand(msg.text.trim().substring(6).trim()));
+            return true;
+        }
+
+        if (msg.text != null && msg.text.trim().startsWith("/") && accountName != null)
+        {
+            BrainOutServer.PostRunnable(() -> ChatCommands.handle(this, msg.text.trim()));
             return true;
         }
 
