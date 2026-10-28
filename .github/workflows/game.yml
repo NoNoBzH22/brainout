@@ -150,7 +150,20 @@ jobs:
         run: |
           bash packaging/build_portable.sh build/out
           test -f build/out/BrainOut/BrainOut.exe
+          # one file installer (Inno Setup is installed on GitHub's Windows runners)
+          mkdir -p build/setup
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q \
+            "-DSource=$(cygpath -w build/out/BrainOut)" "-DOutput=$(cygpath -w build/setup)" \
+            "-DVersion=1.0.${{ github.run_number }}" packaging/windows/BrainOut.iss
           cd build/out && 7z a -tzip ${{ matrix.artifact }}.zip BrainOut > /dev/null
+
+      - name: Upload the Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v5
+        with:
+          name: BrainOut-Windows-Setup
+          path: build/setup/BrainOut-Setup.exe
+          compression-level: 0
 
       - name: Package for Linux
         if: runner.os == 'Linux' && !matrix.mac
