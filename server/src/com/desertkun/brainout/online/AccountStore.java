@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  *                 "closed" only lets existing accounts in         (default: open)
  *   ADMINS        comma separated account names given admin rights (default: none)
  *   ALLOWED_ACCOUNTS  comma separated account names allowed to register; when set,
- *                 nobody else can create an account                (default: anyone)
+ *                 nobody else can create an account, except ADMINS (default: anyone)
  */
 public class AccountStore
 {
@@ -142,7 +142,8 @@ public class AccountStore
 
         if (!account.isFile())
         {
-            if (!registrationOpen || (!allowed.isEmpty() && !allowed.contains(key)))
+            // admins can always create their account
+            if (!admins.contains(key) && (!registrationOpen || (!allowed.isEmpty() && !allowed.contains(key))))
                 return Result.registrationClosed;
 
             byte[] salt = new byte[16];
