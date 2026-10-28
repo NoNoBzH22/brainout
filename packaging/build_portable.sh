@@ -1,6 +1,6 @@
 #!/bin/bash
 # Assembles a portable BrainOut folder for Windows or Linux: a bundled Java runtime,
-# the game and its data, and a launcher (BrainOut.bat / BrainOut.sh).
+# the game and its data, and a launcher (BrainOut.exe / BrainOut.sh).
 # The game writes its settings next to its data, so keep the folder somewhere writable.
 #
 # Prerequisites (from the repository root):
@@ -37,12 +37,23 @@ JVM_OPTIONS="-Xmx2g --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
         # the game reads and writes files relative to the working directory: run it from game\
-        printf '%s\r\n' \
-            '@echo off' \
-            'cd /d "%~dp0game"' \
-            "start \"\" \"%~dp0runtime\\bin\\javaw.exe\" $JVM_OPTIONS -jar brainout-desktop.jar --offline --unsafe %*" \
-            > "$APP/BrainOut.bat"
         cp "$ROOT/data/assets/main/icons/icon.ico" "$APP/game/"
+        # BrainOut.exe (packaging/windows/launcher.c) with MinGW, or a .bat without it
+        if command -v gcc > /dev/null && command -v windres > /dev/null; then
+            TMP="$(mktemp -d)"
+            cp "$ROOT/packaging/windows/launcher.c" "$ROOT/packaging/windows/launcher.rc" "$TMP/"
+            cp "$ROOT/data/assets/main/icons/icon.ico" "$TMP/"
+            (cd "$TMP" && windres launcher.rc -O coff -o launcher.res &&
+                gcc -O2 -s -municode -mwindows -o BrainOut.exe launcher.c launcher.res)
+            cp "$TMP/BrainOut.exe" "$APP/BrainOut.exe"
+            rm -rf "$TMP"
+        else
+            printf '%s\r\n' \
+                '@echo off' \
+                'cd /d "%~dp0game"' \
+                "start \"\" \"%~dp0runtime\\bin\\javaw.exe\" $JVM_OPTIONS -jar brainout-desktop.jar --offline --unsafe %*" \
+                > "$APP/BrainOut.bat"
+        fi
         ;;
     *)
         cat > "$APP/BrainOut.sh" <<EOF

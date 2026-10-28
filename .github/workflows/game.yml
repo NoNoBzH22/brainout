@@ -149,6 +149,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           bash packaging/build_portable.sh build/out
+          test -f build/out/BrainOut/BrainOut.exe
           cd build/out && 7z a -tzip ${{ matrix.artifact }}.zip BrainOut > /dev/null
 
       - name: Package for Linux
