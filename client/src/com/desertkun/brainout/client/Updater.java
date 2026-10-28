@@ -14,6 +14,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -22,15 +23,21 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 /**
  * Updates the game from the releases of its GitHub repository: each build of the game is published
  * as release "client-<build>", and the game knows its own build from build.txt in its jar.
  *
- * Windows: downloads BrainOut-Setup.exe and runs it silently, it restarts the game when done.
- * macOS: downloads the app, and a script replaces BrainOut.app with it once the game has quit.
- * Linux and development builds only check nothing.
+ * Usually only the files that changed are downloaded: the release has a manifest.json with the
+ * hash of the jar and of each data package, compared with the ones next to the running jar. They
+ * are put in place by a small script once the game has quit, which then starts it again.
+ *
+ * Without a manifest, the whole game is downloaded: Windows runs BrainOut-Setup.exe silently,
+ * macOS replaces BrainOut.app. Development builds (no build.txt) check nothing.
  */
 public class Updater
 {
@@ -54,6 +61,25 @@ public class Updater
         }
     }
 
+    private static boolean IsWindows()
+    {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    /** The folder of the running jar, with packages/ next to it. */
+    private static File GameDir()
+    {
+        try
+        {
+            File jar = new File(Updater.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            return jar.isFile() ? jar.getParentFile() : null;
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
+    }
+
     private static String AssetName()
     {
         String os = System.getProperty("os.name", "").toLowerCase();
@@ -74,9 +100,9 @@ public class Updater
     public static void Check(Runnable next)
     {
         int build = Build();
-        String assetName = AssetName();
+        File gameDir = GameDir();
 
-        if (checked || build <= 0 || assetName == null)
+        if (checked || build <= 0 || gameDir == null)
         {
             next.run();
             return;
@@ -86,54 +112,127 @@ public class Updater
 
         new Thread(() ->
         {
-            String url = null;
-            int latest = 0;
+            Plan plan = null;
 
             try
             {
-                JSONObject release = new JSONObject(Get(RELEASES));
-                String tag = release.optString("tag_name", "");
-
-                if (tag.startsWith(TAG_PREFIX))
-                {
-                    latest = Integer.parseInt(tag.substring(TAG_PREFIX.length()));
-                }
-
-                JSONArray assets = release.optJSONArray("assets");
-                for (int i = 0; assets != null && i < assets.length(); i++)
-                {
-                    JSONObject asset = assets.getJSONObject(i);
-                    if (assetName.equals(asset.optString("name")))
-                    {
-                        url = asset.optString("browser_download_url");
-                    }
-                }
+                plan = Plan(build, gameDir);
             }
             catch (Exception e)
             {
                 if (Log.INFO) Log.info("No update information: " + e.getMessage());
             }
 
-            final String download = url;
-            final int version = latest;
+            final Plan update = plan;
 
             Gdx.app.postRunnable(() ->
             {
-                if (download == null || version <= build)
+                if (update == null)
                 {
                     next.run();
                     return;
                 }
 
-                Offer(build, version, download, next);
+                Offer(build, update, next);
             });
         }, "update-check").start();
     }
 
-    private static void Offer(int build, int version, String download, Runnable next)
+    /** What to download to go from this build to the latest one, null when up to date. */
+    private static class Plan
     {
+        int version;
+        File gameDir;
+        // files that changed: path in the game folder -> download url
+        ArrayMap<String, String> files = new ArrayMap<>();
+        long size;
+        // the whole game, when the release has no manifest
+        String full;
+    }
+
+    private static Plan Plan(int build, File gameDir) throws Exception
+    {
+        JSONObject release = new JSONObject(Get(RELEASES));
+        String tag = release.optString("tag_name", "");
+
+        if (!tag.startsWith(TAG_PREFIX))
+            return null;
+
+        Plan plan = new Plan();
+        plan.version = Integer.parseInt(tag.substring(TAG_PREFIX.length()));
+        plan.gameDir = gameDir;
+
+        if (plan.version <= build)
+            return null;
+
+        Map<String, String> urls = new HashMap<>();
+        JSONArray assets = release.optJSONArray("assets");
+        for (int i = 0; assets != null && i < assets.length(); i++)
+        {
+            JSONObject asset = assets.getJSONObject(i);
+            urls.put(asset.optString("name"), asset.optString("browser_download_url"));
+        }
+
+        String manifestUrl = urls.get("manifest.json");
+
+        if (manifestUrl == null)
+        {
+            String name = AssetName();
+            plan.full = name != null ? urls.get(name) : null;
+            return plan.full != null ? plan : null;
+        }
+
+        JSONObject files = new JSONObject(GetFollowing(manifestUrl)).getJSONObject("files");
+
+        for (String path : files.keySet())
+        {
+            JSONObject entry = files.getJSONObject(path);
+            File local = new File(gameDir, path);
+
+            if (local.isFile() && entry.optString("sha256").equalsIgnoreCase(Sha256(local)))
+                continue;
+
+            String url = urls.get(entry.optString("asset"));
+            if (url == null)
+                throw new Exception("missing " + entry.optString("asset"));
+
+            plan.files.put(path, url);
+            plan.size += entry.optLong("size");
+        }
+
+        // a newer build with the same files: nothing to download
+        return plan.files.size > 0 ? plan : null;
+    }
+
+    private static String Sha256(File file) throws Exception
+    {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+        try (InputStream in = new FileInputStream(file))
+        {
+            byte[] buffer = new byte[1 << 20];
+            int read;
+            while ((read = in.read(buffer)) != -1)
+            {
+                digest.update(buffer, 0, read);
+            }
+        }
+
+        StringBuilder hex = new StringBuilder();
+        for (byte b : digest.digest())
+        {
+            hex.append(String.format("%02x", b));
+        }
+        return hex.toString();
+    }
+
+    private static void Offer(int build, Plan plan, Runnable next)
+    {
+        String size = plan.full != null ? "" :
+            " (" + Math.max(1, plan.size / (1024 * 1024)) + " Mo a telecharger)";
+
         BrainOutClient.getInstance().topState().pushMenu(new ConfirmationPopup(
-            "Une mise a jour du jeu est disponible (version " + version + ", tu as la " + build + ").\n" +
+            "Une mise a jour du jeu est disponible : version " + plan.version + ", tu as la " + build + size + ".\n" +
             "L'installer maintenant ? Le jeu redemarrera tout seul.")
         {
             @Override
@@ -151,7 +250,7 @@ public class Updater
             @Override
             public void yes()
             {
-                Gdx.app.postRunnable(() -> Install(download, next));
+                Gdx.app.postRunnable(() -> Install(plan, next));
             }
 
             @Override
@@ -190,7 +289,7 @@ public class Updater
         }
     }
 
-    private static void Install(String download, Runnable next)
+    private static void Install(Plan plan, Runnable next)
     {
         ProgressPopup progress = new ProgressPopup();
         BrainOutClient.getInstance().topState().pushMenu(progress);
@@ -199,23 +298,13 @@ public class Updater
         {
             try
             {
-                String name = download.substring(download.lastIndexOf('/') + 1);
-                File file = new File(Files.createTempDirectory("brainout-update").toFile(), name);
-
-                Download(download, file, percent -> Gdx.app.postRunnable(() ->
-                    progress.setText("Telechargement de la mise a jour... " + percent + " %")));
-
-                Gdx.app.postRunnable(() -> progress.setText("Installation..."));
-
-                if (name.endsWith(".exe"))
+                if (plan.full != null)
                 {
-                    // Inno Setup: silent install into the same folder, the installer starts the game again
-                    new ProcessBuilder(file.getAbsolutePath(), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-                        "/CLOSEAPPLICATIONS").start();
+                    InstallFull(plan.full, progress);
                 }
                 else
                 {
-                    ReplaceMacApp(file);
+                    InstallFiles(plan, progress);
                 }
 
                 Gdx.app.postRunnable(() -> Gdx.app.exit());
@@ -239,6 +328,109 @@ public class Updater
                 });
             }
         }, "update-download").start();
+    }
+
+    private static void InstallFull(String download, ProgressPopup progress) throws Exception
+    {
+        String name = download.substring(download.lastIndexOf('/') + 1);
+        File file = new File(Files.createTempDirectory("brainout-update").toFile(), name);
+
+        Download(download, file, percent -> Gdx.app.postRunnable(() ->
+            progress.setText("Telechargement de la mise a jour... " + percent + " %")));
+
+        Gdx.app.postRunnable(() -> progress.setText("Installation..."));
+
+        if (name.endsWith(".exe"))
+        {
+            // Inno Setup: silent install into the same folder, the installer starts the game again
+            new ProcessBuilder(file.getAbsolutePath(), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                "/CLOSEAPPLICATIONS").start();
+        }
+        else
+        {
+            ReplaceMacApp(file);
+        }
+    }
+
+    /**
+     * Downloads the changed files into update/ next to the game, then a script started now moves
+     * them over the old ones once the game has quit (a running game keeps its jar locked on
+     * Windows) and starts it again.
+     */
+    private static void InstallFiles(Plan plan, ProgressPopup progress) throws Exception
+    {
+        File staging = new File(plan.gameDir, "update");
+        DeleteTree(staging);
+
+        for (int i = 0; i < plan.files.size; i++)
+        {
+            String path = plan.files.getKeyAt(i);
+            String url = plan.files.getValueAt(i);
+            File target = new File(staging, path);
+            target.getParentFile().mkdirs();
+
+            final String step = "Telechargement (" + (i + 1) + "/" + plan.files.size + ") ";
+            Download(url, target, percent -> Gdx.app.postRunnable(() ->
+                progress.setText(step + percent + " %")));
+        }
+
+        Gdx.app.postRunnable(() -> progress.setText("Installation..."));
+
+        String pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+        File dir = plan.gameDir;
+
+        if (IsWindows())
+        {
+            File script = new File(dir, "update.cmd");
+            String text =
+                "@echo off\r\n" +
+                ":wait\r\n" +
+                "tasklist /FI \"PID eq " + pid + "\" 2>nul | find \"" + pid + "\" >nul\r\n" +
+                "if not errorlevel 1 (\r\n" +
+                "  timeout /t 1 /nobreak >nul\r\n" +
+                "  goto wait\r\n" +
+                ")\r\n" +
+                "robocopy \"%~dp0update\" \"%~dp0.\" /E /MOVE /NFL /NDL /NJH /NJS /NP >nul\r\n" +
+                "rmdir /S /Q \"%~dp0update\" 2>nul\r\n" +
+                "if exist \"%~dp0..\\BrainOut.exe\" start \"\" \"%~dp0..\\BrainOut.exe\"\r\n";
+
+            Files.write(script.toPath(), text.getBytes(StandardCharsets.UTF_8));
+            new ProcessBuilder("cmd", "/c", "start", "\"BrainOut\"", "/min", script.getAbsolutePath())
+                .directory(dir).start();
+        }
+        else
+        {
+            String app = System.getProperty("brainout.app");
+            String restart = app != null ? "open \"" + app + "\"" :
+                "[ -x \"$DIR/../BrainOut.sh\" ] && nohup \"$DIR/../BrainOut.sh\" > /dev/null 2>&1 &";
+
+            File script = new File(dir, "update.sh");
+            String text =
+                "#!/bin/bash\n" +
+                "DIR=\"" + dir.getAbsolutePath() + "\"\n" +
+                "while kill -0 " + pid + " 2>/dev/null; do sleep 0.5; done\n" +
+                "cp -R \"$DIR/update/.\" \"$DIR/\" && rm -rf \"$DIR/update\"\n" +
+                restart + "\n";
+
+            Files.write(script.toPath(), text.getBytes(StandardCharsets.UTF_8));
+            new ProcessBuilder("/bin/bash", script.getAbsolutePath())
+                .redirectErrorStream(true)
+                .redirectOutput(new File(dir, "update.log"))
+                .start();
+        }
+    }
+
+    private static void DeleteTree(File file)
+    {
+        File[] children = file.listFiles();
+        if (children != null)
+        {
+            for (File child : children)
+            {
+                DeleteTree(child);
+            }
+        }
+        file.delete();
     }
 
     /** A script waits for the game to quit, swaps the app for the new one and starts it. */
@@ -294,6 +486,21 @@ public class Updater
         finally
         {
             connection.disconnect();
+        }
+    }
+
+    private static String GetFollowing(String url) throws Exception
+    {
+        File temp = File.createTempFile("brainout-manifest", ".json");
+
+        try
+        {
+            Download(url, temp, percent -> {});
+            return new String(Files.readAllBytes(temp.toPath()), StandardCharsets.UTF_8);
+        }
+        finally
+        {
+            temp.delete();
         }
     }
 

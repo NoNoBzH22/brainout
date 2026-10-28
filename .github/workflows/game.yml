@@ -159,7 +159,7 @@ jobs:
           ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           [ -f "$ISCC" ] || choco install innosetup -y --no-progress > /dev/null
           if ! log=$("$ISCC" \
-              "-DSource=$(cygpath -w build/out/BrainOut)" "-DOutput=$(cygpath -w build/setup)" \
+              "-DSource=$(cygpath -aw build/out/BrainOut)" "-DOutput=$(cygpath -aw build/setup)" \
               "-DVersion=1.0.${{ github.run_number }}" packaging/windows/BrainOut.iss 2>&1); then
             echo "$log" | tail -30
             echo "::error title=Inno Setup::$(echo "$log" | tail -8 | tr '\n' ' ')"
@@ -188,3 +188,71 @@ jobs:
             build/out/*.zip
             build/out/*.tar.gz
           compression-level: 0
+
+  # Publishes the build as a GitHub release: one place to download the game, and the source
+  # of the updates the game offers (see client/.../Updater.java). Besides the full packages,
+  # the release holds the jar and each data package with a manifest of their hashes, so the game
+  # only downloads the files that changed.
+  release:
+    name: Publish release
+    needs: [data, package]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: BrainOut-*
+          path: release
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: brainout-desktop-jar
+          path: game
+
+      - name: Restore game data
+        uses: actions/cache/restore@v4
+        with:
+          path: bin/client/packages
+          key: ${{ needs.data.outputs.key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+
+      - name: Update files and manifest
+        run: |
+          cp game/brainout-desktop.jar release/
+          for f in bin/client/packages/*.zip; do cp "$f" "release/package-$(basename "$f")"; done
+          python3 - <<'PY'
+          import hashlib, json, os
+          def sha(path):
+              h = hashlib.sha256()
+              with open(path, 'rb') as f:
+                  for block in iter(lambda: f.read(1 << 20), b''):
+                      h.update(block)
+              return h.hexdigest()
+          files = {'brainout-desktop.jar': {'asset': 'brainout-desktop.jar'}}
+          for name in sorted(os.listdir('bin/client/packages')):
+              if name.endswith('.zip'):
+                  files['packages/' + name] = {'asset': 'package-' + name}
+          for path, entry in files.items():
+              local = os.path.join('release', entry['asset'])
+              entry['sha256'] = sha(local)
+              entry['size'] = os.path.getsize(local)
+          json.dump({'build': ${{ github.run_number }}, 'files': files}, open('release/manifest.json', 'w'), indent=1)
+          PY
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la release
+          gh release create "client-${{ github.run_number }}" release/* \
+            --target "${{ github.sha }}" --latest \
+            --title "BrainOut ${{ github.run_number }}" \
+            --notes "Windows : BrainOut-Setup.exe (installe le jeu, qui se met ensuite a jour tout seul). macOS : BrainOut-macOS-arm64.zip. Linux : BrainOut-Linux-x64.tar.gz."
+          # keep the last 3 releases
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | grep '^client-' | sort -t- -k2 -n -r \
+            | tail -n +4 | xargs -r -I{} gh release delete {} --yes --cleanup-tag
