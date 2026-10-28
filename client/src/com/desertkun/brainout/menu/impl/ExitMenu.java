@@ -7,6 +7,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.desertkun.brainout.*;
+import com.desertkun.brainout.client.PrivateServer;
 import com.desertkun.brainout.common.enums.DisconnectReason;
 import com.desertkun.brainout.data.Map;
 import com.desertkun.brainout.gs.GameState;
@@ -54,6 +55,14 @@ public class ExitMenu extends Menu
         if (enableActiveButtons)
         {
             addButton(L.get("MENU_ENTER_PROMO_BTN"), this::promo);
+        }
+        if (PrivateServer.IsActive())
+        {
+            if (!BrainOutClient.ClientController.isLobby())
+            {
+                addButton("Retour au lobby", () -> switchTo(PrivateServer.Mode.lobby));
+            }
+            addButton("Changer de mode", this::changeMode);
         }
         addButton(L.get("MENU_EXIT"), this::exit);
 
@@ -173,6 +182,24 @@ public class ExitMenu extends Menu
     protected MenuAlign getMenuAlign()
     {
         return MenuAlign.center;
+    }
+
+    private void switchTo(PrivateServer.Mode mode)
+    {
+        close();
+        PrivateServer.SwitchTo(mode);
+    }
+
+    private void changeMode()
+    {
+        GameState gs = getGameState();
+
+        if (gs == null)
+            return;
+
+        close();
+        gs.pushMenu(PrivateServer.ModesPopup(
+            PrivateServer.Mode.free, PrivateServer.Mode.deathmatch, PrivateServer.Mode.ctf));
     }
 
     private void promo()

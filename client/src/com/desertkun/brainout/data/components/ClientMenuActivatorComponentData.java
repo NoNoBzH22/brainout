@@ -2,6 +2,7 @@ package com.desertkun.brainout.data.components;
 
 import com.desertkun.brainout.BrainOut;
 import com.desertkun.brainout.BrainOutClient;
+import com.desertkun.brainout.client.PrivateServer;
 import com.desertkun.brainout.client.states.CSGame;
 import com.desertkun.brainout.client.states.CSQuickPlay;
 import com.desertkun.brainout.content.Achievement;
@@ -11,6 +12,7 @@ import com.desertkun.brainout.data.active.PlayerData;
 import com.desertkun.brainout.events.Event;
 import com.desertkun.brainout.menu.Menu;
 import com.desertkun.brainout.menu.impl.*;
+import com.desertkun.brainout.menu.popups.AlertPopup;
 import com.desertkun.brainout.mode.GameMode;
 import com.desertkun.brainout.online.Matchmaking;
 import com.desertkun.brainout.online.RoomSettings;
@@ -97,6 +99,21 @@ public class ClientMenuActivatorComponentData extends ClientActiveActivatorCompo
 
     private Menu openMenu(String menu)
     {
+        // a private server has no matchmaking: the lobby portals switch to its other games
+        if (PrivateServer.IsActive())
+        {
+            switch (menu)
+            {
+                case "quickplay":
+                case "findgame":
+                    return PrivateServer.ModesPopup(PrivateServer.Mode.deathmatch, PrivateServer.Mode.ctf);
+                case "freeplay":
+                    return PrivateServer.ModesPopup(PrivateServer.Mode.free);
+                case "top100players":
+                    return new AlertPopup("Pas de classement sur un serveur prive");
+            }
+        }
+
         switch (menu)
         {
             case "workbench":

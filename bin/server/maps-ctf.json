@@ -1,31 +1,32 @@
 {
-    "rotary": "random",
-    "class": "source.MapSetSource",
-    "maps": {
-        "bunker_ctf": {
-            "packages": [
-                "map_factory",
-                "map_siber",
-                "map_forest",
-                "map_bridge",
-                "map_station"
-            ],
-            "map": "maps/bunker_ctf.map"
-        }
-    },
-    "modes": {
-        "ctf": {
-            "mode": "ctf",
-            "settings": {
-                "winPoints": 4,
-                "chips": 4
-            }
-        }
-    },
-    "sets": [
-        {
-            "map": "bunker_ctf",
-            "mode": "ctf"
-        }
-    ]
+ "rotary": "random",
+ "class": "source.MapSetSource",
+ "maps": {
+  "bunker_ctf": {
+   "packages": [
+    "map_factory",
+    "map_siber",
+    "map_forest",
+    "map_bridge",
+    "map_station",
+    "lobby"
+   ],
+   "map": "maps/bunker_ctf.map"
+  }
+ },
+ "modes": {
+  "ctf": {
+   "mode": "ctf",
+   "settings": {
+    "winPoints": 4,
+    "chips": 4
+   }
+  }
+ },
+ "sets": [
+  {
+   "map": "bunker_ctf",
+   "mode": "ctf"
+  }
+ ]
 }

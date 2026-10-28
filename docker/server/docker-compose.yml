@@ -1,5 +1,6 @@
 # BrainOut private server: open world, deathmatch and capture the flag, all with bots.
-# In the game, enter the IP of the machine running this container, then pick a mode.
+# In the game, enter the IP of the machine running this container: you arrive in the lobby,
+# where the portals lead to the open world, deathmatch and capture the flag.
 # Each mode uses three ports (tcp, udp, http), published with the same numbers.
 services:
   brainout:
@@ -20,8 +21,8 @@ services:
       BOTS: "8"
       # adaptive: bots match the gear and kill streak of the players around them
       BOT_DIFFICULTY: adaptive
-      # modes to run: free (open world), deathmatch, ctf (capture the flag)
-      MODES: "free,deathmatch,ctf"
+      # modes to run: lobby, free (open world), deathmatch, ctf (capture the flag)
+      MODES: "lobby,free,deathmatch,ctf"
       # bots filling deathmatch and capture the flag games, and their skill
       MATCH_BOTS: "8"
       MATCH_BOT_DIFFICULTY: adaptive
@@ -50,3 +51,7 @@ services:
       - "36575:36575/tcp"
       - "36576:36576/udp"
       - "36577:36577/tcp"
+      # lobby
+      - "36585:36585/tcp"
+      - "36586:36586/udp"
+      - "36587:36587/tcp"

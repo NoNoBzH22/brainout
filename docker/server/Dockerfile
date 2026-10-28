@@ -24,7 +24,7 @@ VOLUME /data
 
 USER brainout
 
-# open world, deathmatch, capture the flag
-EXPOSE 36555/tcp 36556/udp 36557/tcp 36565/tcp 36566/udp 36567/tcp 36575/tcp 36576/udp 36577/tcp
+# open world, deathmatch, capture the flag, lobby
+EXPOSE 36555/tcp 36556/udp 36557/tcp 36565/tcp 36566/udp 36567/tcp 36575/tcp 36576/udp 36577/tcp 36585/tcp 36586/udp 36587/tcp
 
 ENTRYPOINT ["brainout-server"]

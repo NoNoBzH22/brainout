@@ -3,13 +3,9 @@ package com.desertkun.brainout.client.states;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
-import com.badlogic.gdx.scenes.scene2d.InputEvent;
-import com.badlogic.gdx.utils.ArrayMap;
-import com.desertkun.brainout.menu.Popup;
-import com.desertkun.brainout.menu.ui.ClickOverListener;
 import com.desertkun.brainout.BrainOut;
 import com.desertkun.brainout.BrainOutClient;
-import com.desertkun.brainout.menu.popups.AlertPopup;
+import com.desertkun.brainout.client.PrivateServer;
 import com.desertkun.brainout.menu.popups.OKInputPopup;
 
 import java.nio.charset.StandardCharsets;
@@ -67,63 +63,13 @@ public class CSWaitForUser extends ControllerState
                 String value = valueEdit.getText().trim();
                 writeLocal(LAST_ADDRESS_FILE, value);
 
-                askMode(value);
+                PrivateServer.SetAddress(value);
+                askAccount();
             }
         });
     }
 
-    // the server runs one game per mode, each on its own ports: base port + 10 * mode
-    private static final String[] MODES = {"Monde ouvert", "Melee generale", "Capture du drapeau"};
-
-    private void askMode(String address)
-    {
-        BrainOutClient.getInstance().topState().pushMenu(new Popup("Choisis un mode")
-        {
-            {
-                ArrayMap<String, PopupButtonStyle> buttons = new ArrayMap<>();
-
-                for (int i = 0; i < MODES.length; i++)
-                {
-                    final int mode = i;
-                    buttons.put(MODES[i], new PopupButtonStyle(new ClickOverListener()
-                    {
-                        @Override
-                        public void clicked(InputEvent event, float x, float y)
-                        {
-                            playSound(MenuSound.select);
-                            pop();
-                            askAccount(withModePort(address, mode));
-                        }
-                    }));
-                }
-
-                setButtons(buttons);
-            }
-        });
-    }
-
-    private static String withModePort(String address, int mode)
-    {
-        String host = address;
-        int port = 36555;
-
-        int colon = address.lastIndexOf(':');
-        if (colon > 0)
-        {
-            try
-            {
-                port = Integer.parseInt(address.substring(colon + 1));
-                host = address.substring(0, colon);
-            }
-            catch (NumberFormatException ignored)
-            {
-            }
-        }
-
-        return host + ":" + (port + mode * 10);
-    }
-
-    private void askAccount(String address)
+    private void askAccount()
     {
         BrainOutClient.getInstance().topState().pushMenu(new OKInputPopup("Account name (a new name creates an account)",
             readLocal(LAST_ACCOUNT_FILE, ""))
@@ -134,12 +80,12 @@ public class CSWaitForUser extends ControllerState
                 String account = valueEdit.getText().trim();
                 writeLocal(LAST_ACCOUNT_FILE, account);
 
-                askPassword(address, account);
+                askPassword(account);
             }
         });
     }
 
-    private void askPassword(String address, String account)
+    private void askPassword(String account)
     {
         BrainOutClient.getInstance().topState().pushMenu(new OKInputPopup("Password for " + account, "")
         {
@@ -156,7 +102,11 @@ public class CSWaitForUser extends ControllerState
             public void ok()
             {
                 AccountToken = ACCOUNT_TOKEN_PREFIX + account + ":" + hashPassword(account, valueEdit.getText());
-                connect(address);
+
+                // everyone arrives in the lobby and picks a mode there; servers without a lobby
+                // get the mode choice instead
+                PrivateServer.Connect(PrivateServer.Mode.lobby, () ->
+                    PrivateServer.Failed("Pas de lobby sur ce serveur, choisis directement un mode."));
             }
         });
     }
@@ -175,39 +125,6 @@ public class CSWaitForUser extends ControllerState
         {
             throw new RuntimeException(e);
         }
-    }
-
-    private void connect(String value)
-    {
-        // "host" or "host:port"; udp and http ports follow the tcp one
-        String address = value;
-        int tcp = 36555;
-
-        int colon = value.lastIndexOf(':');
-        if (colon > 0)
-        {
-            try
-            {
-                tcp = Integer.parseInt(value.substring(colon + 1));
-                address = value.substring(0, colon);
-            }
-            catch (NumberFormatException ignored)
-            {
-            }
-        }
-
-        final String host = address;
-        final int port = tcp;
-
-        Gdx.app.postRunnable(() ->
-        {
-            BrainOutClient.ClientController.connect(
-                host,
-                port, port + 1, port + 2,
-                null,
-                false,
-                -1, () -> BrainOutClient.getInstance().topState().pushMenu(new AlertPopup("MENU_CONNECTION_ERROR")));
-        });
     }
 
     private static String readLocal(String fileName, String defaultValue)
