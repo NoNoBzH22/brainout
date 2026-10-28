@@ -1,5 +1,7 @@
 package com.desertkun.brainout.menu.impl;
 
+import com.desertkun.brainout.client.PrivateServer;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.graphics.Color;
@@ -770,6 +772,14 @@ public class LobbyMenu extends PlayerSelectionMenu
 
     private void globalConflict()
     {
+        // private servers have no matchmaking: their games run side by side on known ports
+        if (PrivateServer.IsActive())
+        {
+            BrainOutClient.getInstance().topState().pushMenu(
+                PrivateServer.ModesPopup(PrivateServer.Mode.deathmatch, PrivateServer.Mode.ctf));
+            return;
+        }
+
         if (!BrainOut.OnlineEnabled())
         {
             BrainOutClient.getInstance().topState().pushMenu(new AlertPopup(
@@ -826,6 +836,14 @@ public class LobbyMenu extends PlayerSelectionMenu
 
     private void findGame()
     {
+        // private servers have no matchmaking: their games run side by side on known ports
+        if (PrivateServer.IsActive())
+        {
+            BrainOutClient.getInstance().topState().pushMenu(
+                PrivateServer.ModesPopup(PrivateServer.Mode.deathmatch, PrivateServer.Mode.ctf));
+            return;
+        }
+
         if (!BrainOut.OnlineEnabled())
         {
             BrainOutClient.getInstance().topState().pushMenu(new AlertPopup(
@@ -931,6 +949,14 @@ public class LobbyMenu extends PlayerSelectionMenu
 
     private void quickPlay()
     {
+        // private servers have no matchmaking: their games run side by side on known ports
+        if (PrivateServer.IsActive())
+        {
+            BrainOutClient.getInstance().topState().pushMenu(
+                PrivateServer.ModesPopup(PrivateServer.Mode.deathmatch, PrivateServer.Mode.ctf));
+            return;
+        }
+
         if (!BrainOut.OnlineEnabled())
         {
             BrainOutClient.getInstance().topState().pushMenu(new AlertPopup(

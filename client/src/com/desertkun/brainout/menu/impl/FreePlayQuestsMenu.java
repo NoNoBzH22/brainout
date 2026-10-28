@@ -1,5 +1,7 @@
 package com.desertkun.brainout.menu.impl;
 
+import com.desertkun.brainout.client.PrivateServer;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -388,6 +390,14 @@ public class FreePlayQuestsMenu extends Menu
 
     private void playWithPartner()
     {
+        // on a private server the open world is its own game, joined directly
+        if (PrivateServer.IsActive())
+        {
+            pop();
+            PrivateServer.SwitchTo(PrivateServer.Mode.free);
+            return;
+        }
+
         if (!BrainOut.OnlineEnabled())
         {
             popMeAndPushMenu(new AlertPopup(
@@ -415,6 +425,14 @@ public class FreePlayQuestsMenu extends Menu
 
     private void playSolo()
     {
+        // on a private server the open world is its own game, joined directly
+        if (PrivateServer.IsActive())
+        {
+            pop();
+            PrivateServer.SwitchTo(PrivateServer.Mode.free);
+            return;
+        }
+
         if (!BrainOut.OnlineEnabled())
         {
             popMeAndPushMenu(new AlertPopup(
