@@ -1,6 +1,8 @@
 package com.desertkun.brainout.client;
 
 import com.desertkun.brainout.online.AccountStore;
+import com.desertkun.brainout.mode.GameMode;
+import com.desertkun.brainout.mode.ServerFreeRealization;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.Vector2;
@@ -286,6 +288,12 @@ public class PlayerClient extends Client
     @SuppressWarnings("unused")
     public boolean received(final ChatSendMsg msg)
     {
+        if (msg.text != null && msg.text.trim().toLowerCase().startsWith("/squad"))
+        {
+            BrainOutServer.PostRunnable(() -> squadCommand(msg.text.trim().substring(6).trim()));
+            return true;
+        }
+
         if (msg.text.toLowerCase().contains("we are legion"))
         {
             this.egg = true;
@@ -778,9 +786,42 @@ public class PlayerClient extends Client
 
         profile.setName(name);
 
+        // used as the player's identity by parties
+        accessTokenAccount = name;
+
+        String squad = profile.getSelection("squad");
+        if (squad != null)
+        {
+            partyId = "squad-" + squad.toLowerCase();
+        }
+
         onlineInitialized(true);
         setRights(accounts.isAdmin(name) ? PlayerRights.admin : PlayerRights.none);
         sendServerInfo();
+    }
+
+    private void squadCommand(String name)
+    {
+        GameMode gameMode = BrainOutServer.Controller.getGameMode();
+
+        if (gameMode == null || !(gameMode.getRealization() instanceof ServerFreeRealization) || accountName == null)
+        {
+            sendSystemMessage("Squads are only available in the open world, with an account.");
+            return;
+        }
+
+        if (!name.isEmpty() && !name.matches("[A-Za-z0-9_\\-]{2,20}"))
+        {
+            sendSystemMessage("Squad names use 2 to 20 letters, digits, - or _.");
+            return;
+        }
+
+        ((ServerFreeRealization) gameMode.getRealization()).joinSquad(this, name.isEmpty() ? null : name);
+    }
+
+    public void sendSystemMessage(String text)
+    {
+        sendTCP(new ChatMsg("Server", text, "server", ServerConstants.Chat.COLOR_INFO, -1));
     }
 
     private void rejectLogin(String message)
@@ -5369,6 +5410,12 @@ public class PlayerClient extends Client
     public String getPartyId()
     {
         return partyId;
+    }
+
+    /** Squads on private servers reuse the party mechanics, see ServerFreeRealization.joinSquad. */
+    public void setPartyId(String partyId)
+    {
+        this.partyId = partyId;
     }
 
     @Override

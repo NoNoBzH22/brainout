@@ -421,6 +421,9 @@ public class Types
             ActiveLayer.class, Weapon.ShootMode.class,
 
             UpdateGlobalContentIndex.class,
+
+            // server -> client, private servers
+            SquadPositionsMsg.class,
         });
     }
 }

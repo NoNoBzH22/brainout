@@ -1603,6 +1603,7 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         scheduleTask(this::syncWaves, 5000, 5000);
         scheduleTask(this::spawnCrows, 2000, 2000);
         scheduleTask(this::ensureFreeplayBots, 15000, 10000);
+        scheduleTask(this::sendSquadPositions, 1000, 1000);
         //scheduleTask(this::spawnZombies, 1000, 1000);
 
         //spawnSnow();
@@ -3291,6 +3292,132 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
 
             party.addMember(playerClient);
         }
+    }
+
+    // lets squad members find each other on their HUD
+    private void sendSquadPositions()
+    {
+        for (ObjectMap.Entry<String, Party> entry : parties)
+        {
+            if (!entry.key.startsWith("squad-"))
+                continue;
+
+            Array<PlayerClient> members = new Array<>();
+            for (ObjectMap.Entry<String, PlayerClient> member : entry.value.getMembers())
+            {
+                members.add(member.value);
+            }
+
+            if (members.size < 2)
+                continue;
+
+            for (PlayerClient receiver : members)
+            {
+                SquadPositionsMsg msg = new SquadPositionsMsg(members.size - 1);
+                int i = 0;
+
+                for (PlayerClient mate : members)
+                {
+                    if (mate == receiver)
+                        continue;
+
+                    PlayerData playerData = mate.getPlayerData();
+
+                    msg.ids[i] = mate.getId();
+                    msg.names[i] = mate.getName();
+
+                    if (playerData != null && mate.isAlive())
+                    {
+                        msg.dimensions[i] = playerData.getDimension();
+                        msg.x[i] = playerData.getX();
+                        msg.y[i] = playerData.getY();
+                        msg.states[i] = (byte) (playerData.isWounded() ? 1 : 0);
+                    }
+                    else
+                    {
+                        msg.dimensions[i] = "";
+                        msg.states[i] = 2;
+                    }
+
+                    i++;
+                }
+
+                receiver.sendTCP(msg);
+            }
+        }
+    }
+
+    /**
+     * Moves a player to a squad (a party kept by this server), or out of any squad when name is null.
+     * Squad members are allies, spawn together and see each other as friends.
+     */
+    public void joinSquad(PlayerClient player, String name)
+    {
+        String current = player.getPartyId();
+
+        if (current != null)
+        {
+            Party party = parties.get(current);
+
+            if (party != null)
+            {
+                if (!party.removeMember(player))
+                {
+                    party.release();
+                    parties.remove(current);
+                }
+                else
+                {
+                    for (ObjectMap.Entry<String, PlayerClient> entry : party.getMembers())
+                    {
+                        entry.value.sendSystemMessage(player.getName() + " left the squad.");
+                    }
+                }
+            }
+        }
+
+        if (name == null)
+        {
+            player.setPartyId(null);
+            player.sendSystemMessage("You left your squad.");
+        }
+        else
+        {
+            String partyId = "squad-" + name.toLowerCase();
+            player.setPartyId(partyId);
+
+            Party party = parties.get(partyId);
+            if (party == null)
+            {
+                party = new Party(partyId);
+                parties.put(partyId, party);
+            }
+
+            for (ObjectMap.Entry<String, PlayerClient> entry : party.getMembers())
+            {
+                entry.value.sendSystemMessage(player.getName() + " joined the squad.");
+            }
+
+            party.addMember(player);
+
+            StringBuilder members = new StringBuilder();
+            for (ObjectMap.Entry<String, PlayerClient> entry : party.getMembers())
+            {
+                if (members.length() > 0)
+                    members.append(", ");
+                members.append(entry.value.getName());
+            }
+
+            player.sendSystemMessage("Squad " + name + ": " + members);
+        }
+
+        if (player.getProfile() != null)
+        {
+            player.getProfile().setSelection("squad", name);
+            player.getProfile().setDirty();
+        }
+
+        BrainOutServer.Controller.sendRemotePlayers();
     }
 
     @Override

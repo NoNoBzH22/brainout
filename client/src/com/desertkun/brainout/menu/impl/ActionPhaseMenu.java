@@ -52,6 +52,7 @@ import com.desertkun.brainout.menu.popups.RichAlertPopup;
 import com.desertkun.brainout.menu.ui.BorderActor;
 import com.desertkun.brainout.menu.ui.InstrumentIcon;
 import com.desertkun.brainout.menu.ui.Minimap;
+import com.desertkun.brainout.menu.ui.SquadHud;
 import com.desertkun.brainout.menu.ui.Notifications;
 import com.desertkun.brainout.menu.widgets.ProfilingWidget;
 import com.desertkun.brainout.menu.widgets.chat.InGameChatWidget;
@@ -105,6 +106,13 @@ public class ActionPhaseMenu extends Menu implements EventReceiver
             minimap.setSize(256, 128);
             minimap.setPosition(16, getHeight() - 144);
             addActor(minimap);
+        }
+
+        {
+            // squad mates' markers, only drawn when the server sends their positions
+            SquadHud squadHud = new SquadHud();
+            squadHud.setBounds(0, 0, getWidth(), getHeight());
+            addActor(squadHud);
         }
 
         playerInfo = new Table();

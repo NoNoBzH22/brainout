@@ -2,6 +2,7 @@ package com.desertkun.brainout.data;
 
 import box2dLight.RayHandler;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -148,6 +149,16 @@ public class ClientMap extends Map
         //tileCamera.getCamera().setToOrtho(false, screenSize.x, screenSize.y );
         //cameraBefore.getCamera().setToOrtho(false, BrainOutClient.getWidth(), BrainOutClient.getHeight() );
         //cameraAfter.getCamera().setToOrtho(false, BrainOutClient.getWidth(), BrainOutClient.getHeight());
+    }
+
+    private static final Vector3 PROJECT_TMP = new Vector3();
+
+    /** Screen position (in HUD pixels) of a point of this map, as drawn by its camera. */
+    public void projectToScreen(float x, float y, Vector2 out)
+    {
+        PROJECT_TMP.set(x, y, 0);
+        root.getCamera().project(PROJECT_TMP, 0, 0, BrainOutClient.getWidth(), BrainOutClient.getHeight());
+        out.set(PROJECT_TMP.x, PROJECT_TMP.y);
     }
 
     public void setScale(float zoom)

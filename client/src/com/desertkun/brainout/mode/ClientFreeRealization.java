@@ -1,5 +1,7 @@
 package com.desertkun.brainout.mode;
 
+import com.desertkun.brainout.menu.ui.SquadHud;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
@@ -824,6 +826,13 @@ public class ClientFreeRealization extends ClientGameRealization<GameModeFree>
         }
 
         return false;
+    }
+
+    @SuppressWarnings("unused")
+    public boolean received(final SquadPositionsMsg msg)
+    {
+        SquadHud.setPositions(msg);
+        return true;
     }
 
     @SuppressWarnings("unused")
