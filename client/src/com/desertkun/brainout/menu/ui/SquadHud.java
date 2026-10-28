@@ -30,6 +30,15 @@ public class SquadHud extends Actor
 
     private final Vector2 screen = new Vector2();
 
+    /** Latest positions, null when the server stopped sending them. */
+    public static SquadPositionsMsg getPositions()
+    {
+        if (System.currentTimeMillis() - PositionsTime > 5000)
+            return null;
+
+        return Positions;
+    }
+
     public static void setPositions(SquadPositionsMsg positions)
     {
         Positions = positions;

@@ -313,6 +313,8 @@ public abstract class ClientSettings extends CoreSettings
                 KeyProperties.Keys.squat);
         new KeycodeProperty("friendly", "MENU_CONTROL_FRIENDS_FP", Input.Keys.F1, controls,
                 KeyProperties.Keys.freePlayFriends);
+        new KeycodeProperty("world-map", "Carte du monde", Input.Keys.M, controls,
+                KeyProperties.Keys.worldMap);
 
         controls.update();
     }

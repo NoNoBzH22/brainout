@@ -117,6 +117,12 @@ public class KeyboardController extends GameController
 
                     return true;
                 }
+                case worldMap:
+                {
+                    sendEvent(GameControllerEvent.obtain(GameControllerEvent.Action.worldMap));
+
+                    return true;
+                }
                 case voiceChat:
                 {
                     sendEvent(GameControllerEvent.obtain(GameControllerEvent.Action.voiceChatBegin));

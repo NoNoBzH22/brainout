@@ -52,7 +52,8 @@ public class GameControllerEvent extends Event
         custom,
 
         activate,
-        freePlayFriends
+        freePlayFriends,
+        worldMap
     }
 
     public Action action;

@@ -2116,6 +2116,10 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
             status.append(" WOUNDED");
         }
 
+        ActiveData location = OutdoorLocation(playerData);
+        status.append(" map=").append(location != null ?
+            location.getDimension() + "@" + (int) location.getX() + "," + (int) location.getY() : "?");
+
         if (playerData.getCurrentInstrument() != null)
         {
             status.append(" holding=").append(playerData.getCurrentInstrument().getContent().getID());
@@ -3294,56 +3298,132 @@ public class ServerFreeRealization extends ServerRealization<GameModeFree>
         }
     }
 
-    // lets squad members find each other on their HUD
+    public static final String[] OUTDOOR_DIMENSIONS = {"default", "forest", "swamp2"};
+
+    private static boolean IsOutdoor(String dimension)
+    {
+        for (String outdoor : OUTDOOR_DIMENSIONS)
+        {
+            if (outdoor.equals(dimension))
+                return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Where to show a player on the world map: their position outside, or the outside door
+     * of the building they are in (following up to a few doors for nested buildings).
+     */
+    private static ActiveData OutdoorLocation(PlayerData playerData)
+    {
+        if (IsOutdoor(playerData.getDimension()))
+            return playerData;
+
+        Map map = playerData.getMap();
+
+        for (int depth = 0; depth < 4 && map != null; depth++)
+        {
+            Map next = null;
+
+            for (ActiveData activeData : map.getActivesForTag(Constants.ActiveTags.PORTAL, false))
+            {
+                ServerPortalComponentData portal = activeData.getComponent(ServerPortalComponentData.class);
+                if (portal == null)
+                    continue;
+
+                PortalData other = portal.findOtherPortal();
+                if (other == null || other.getMap() == null)
+                    continue;
+
+                if (IsOutdoor(other.getDimension()))
+                    return other;
+
+                if (next == null && other.getMap() != map)
+                {
+                    next = other.getMap();
+                }
+            }
+
+            map = next;
+        }
+
+        return null;
+    }
+
+    // lets players find themselves and their squad mates on the HUD and the world map
     private void sendSquadPositions()
     {
-        for (ObjectMap.Entry<String, Party> entry : parties)
+        for (ObjectMap.Entry<Integer, Client> entry : BrainOutServer.Controller.getClients())
         {
-            if (!entry.key.startsWith("squad-"))
+            if (!(entry.value instanceof PlayerClient))
                 continue;
 
-            Array<PlayerClient> members = new Array<>();
-            for (ObjectMap.Entry<String, PlayerClient> member : entry.value.getMembers())
+            PlayerClient receiver = ((PlayerClient) entry.value);
+
+            Array<PlayerClient> mates = new Array<>();
+
+            Party party = receiver.getPartyId() != null && receiver.getPartyId().startsWith("squad-") ?
+                parties.get(receiver.getPartyId()) : null;
+
+            if (party != null)
             {
-                members.add(member.value);
-            }
-
-            if (members.size < 2)
-                continue;
-
-            for (PlayerClient receiver : members)
-            {
-                SquadPositionsMsg msg = new SquadPositionsMsg(members.size - 1);
-                int i = 0;
-
-                for (PlayerClient mate : members)
+                for (ObjectMap.Entry<String, PlayerClient> member : party.getMembers())
                 {
-                    if (mate == receiver)
-                        continue;
-
-                    PlayerData playerData = mate.getPlayerData();
-
-                    msg.ids[i] = mate.getId();
-                    msg.names[i] = mate.getName();
-
-                    if (playerData != null && mate.isAlive())
+                    if (member.value != receiver)
                     {
-                        msg.dimensions[i] = playerData.getDimension();
-                        msg.x[i] = playerData.getX();
-                        msg.y[i] = playerData.getY();
-                        msg.states[i] = (byte) (playerData.isWounded() ? 1 : 0);
+                        mates.add(member.value);
                     }
-                    else
-                    {
-                        msg.dimensions[i] = "";
-                        msg.states[i] = 2;
-                    }
-
-                    i++;
                 }
-
-                receiver.sendTCP(msg);
             }
+
+            SquadPositionsMsg msg = new SquadPositionsMsg(mates.size);
+
+            msg.selfMapDimension = "";
+            PlayerData me = receiver.getPlayerData();
+            if (me != null && receiver.isAlive())
+            {
+                ActiveData location = OutdoorLocation(me);
+                if (location != null)
+                {
+                    msg.selfMapDimension = location.getDimension();
+                    msg.selfMapX = location.getX();
+                    msg.selfMapY = location.getY();
+                }
+            }
+
+            for (int i = 0; i < mates.size; i++)
+            {
+                PlayerClient mate = mates.get(i);
+                PlayerData playerData = mate.getPlayerData();
+
+                msg.ids[i] = mate.getId();
+                msg.names[i] = mate.getName();
+                msg.dimensions[i] = "";
+                msg.mapDimensions[i] = "";
+
+                if (playerData != null && mate.isAlive())
+                {
+                    msg.dimensions[i] = playerData.getDimension();
+                    msg.x[i] = playerData.getX();
+                    msg.y[i] = playerData.getY();
+                    msg.states[i] = (byte) (playerData.isWounded() ? 1 : 0);
+
+                    ActiveData location = OutdoorLocation(playerData);
+                    if (location != null)
+                    {
+                        msg.mapDimensions[i] = location.getDimension();
+                        msg.mapX[i] = location.getX();
+                        msg.mapY[i] = location.getY();
+                    }
+                }
+                else
+                {
+                    msg.states[i] = 2;
+                }
+            }
+
+            receiver.sendTCP(msg);
         }
     }
 

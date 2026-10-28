@@ -38,7 +38,8 @@ public class KeyProperties extends Properties
 
         activate,
         squat,
-        freePlayFriends
+        freePlayFriends,
+        worldMap
     }
 
     private ObjectMap<Integer, Keys> keys;

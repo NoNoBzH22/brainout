@@ -1,5 +1,7 @@
 package com.desertkun.brainout.mode;
 
+import com.desertkun.brainout.gs.GameState;
+
 import com.desertkun.brainout.menu.ui.SquadHud;
 
 import com.badlogic.gdx.Gdx;
@@ -797,6 +799,15 @@ public class ClientFreeRealization extends ClientGameRealization<GameModeFree>
                     case freePlayFriends:
                     {
                         toggleFriendly();
+                        return true;
+                    }
+                    case worldMap:
+                    {
+                        GameState state = BrainOutClient.getInstance().topState();
+                        if (state != null && !(state.topMenu() instanceof WorldMapMenu))
+                        {
+                            state.pushMenu(new WorldMapMenu());
+                        }
                         return true;
                     }
                 }

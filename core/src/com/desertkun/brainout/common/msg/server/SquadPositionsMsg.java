@@ -1,8 +1,11 @@
 package com.desertkun.brainout.common.msg.server;
 
 /**
- * Where the other members of the player's squad are, sent every second on private servers.
+ * Where the player and the other members of their squad are, sent every second on private servers.
  * Arrays are parallel, one entry per squad mate.
+ *
+ * The "map" position is where to show someone on the world map: their position when they are
+ * outside, the entrance of the building they are in otherwise. Empty dimension when unknown.
  */
 public class SquadPositionsMsg
 {
@@ -13,6 +16,12 @@ public class SquadPositionsMsg
     public float[] y;
     // 0 alive, 1 wounded, 2 dead
     public byte[] states;
+    public String[] mapDimensions;
+    public float[] mapX;
+    public float[] mapY;
+
+    public String selfMapDimension;
+    public float selfMapX, selfMapY;
 
     public SquadPositionsMsg() {}
 
@@ -24,5 +33,8 @@ public class SquadPositionsMsg
         x = new float[count];
         y = new float[count];
         states = new byte[count];
+        mapDimensions = new String[count];
+        mapX = new float[count];
+        mapY = new float[count];
     }
 }
