@@ -424,6 +424,7 @@ public class Types
 
             // server -> client, private servers
             SquadPositionsMsg.class,
+            PrivateSessionMsg.class,
         });
     }
 }

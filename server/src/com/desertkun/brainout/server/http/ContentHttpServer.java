@@ -1,5 +1,7 @@
 package com.desertkun.brainout.server.http;
 
+import com.desertkun.brainout.online.LocalMarket;
+
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -22,6 +24,8 @@ public class ContentHttpServer
         server.createContext("/map-dimensions", new MapDimensionHandler());
         server.createContext("/add-image", new AddImageExtensionHandler());
         server.createContext("/upload-map", new UploadMapHandler());
+        // stash storage of private servers, in place of the official market service
+        server.createContext(LocalMarket.PATH, new LocalMarket());
 
         server.setExecutor(Executors.newFixedThreadPool(4));
 

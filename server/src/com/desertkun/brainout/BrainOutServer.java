@@ -1,5 +1,8 @@
 package com.desertkun.brainout;
 
+import com.desertkun.brainout.online.LocalMarket;
+import com.desertkun.brainout.online.PrivateMarketService;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Files;
@@ -182,6 +185,17 @@ public class BrainOutServer extends BrainOut implements Runnable
             }
 
             createOnlineController(sockets);
+        }
+
+        if (offline)
+        {
+            // private server: the stash is kept by this server instead of the official market service
+            Online.setService("login", "http://127.0.0.1");
+
+            if (http > 0)
+            {
+                PrivateMarketService.Install(Online, "http://127.0.0.1:" + http + LocalMarket.PATH);
+            }
         }
 
         serverListener = null;

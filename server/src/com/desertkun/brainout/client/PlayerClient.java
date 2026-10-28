@@ -1,6 +1,7 @@
 package com.desertkun.brainout.client;
 
 import com.desertkun.brainout.online.AccountStore;
+import com.desertkun.brainout.online.LocalMarket;
 import com.desertkun.brainout.mode.GameMode;
 import com.desertkun.brainout.mode.ServerFreeRealization;
 
@@ -794,6 +795,15 @@ public class PlayerClient extends Client
         {
             partyId = "squad-" + squad.toLowerCase();
         }
+
+        // the stash and apartments are stored by this server, see LocalMarket
+        String session = accounts.newSession(name);
+        LoginService loginService = LoginService.Get();
+        if (loginService != null)
+        {
+            accessToken = loginService.newAccessToken(session);
+        }
+        sendTCP(new PrivateSessionMsg(session, LocalMarket.PATH));
 
         onlineInitialized(true);
         setRights(accounts.isAdmin(name) ? PlayerRights.admin : PlayerRights.none);

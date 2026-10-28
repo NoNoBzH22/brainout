@@ -61,6 +61,8 @@ public class AccountStore
     private final Map<String, Integer> failures = new HashMap<>();
     private final Map<String, Long> lockedUntil = new HashMap<>();
     private final SecureRandom random = new SecureRandom();
+    // session token -> account name, for the HTTP services (see LocalMarket)
+    private final Map<String, String> sessions = new HashMap<>();
 
     public static synchronized AccountStore Get()
     {
@@ -218,6 +220,47 @@ public class AccountStore
             if (Log.ERROR) Log.error("Corrupted profile for " + name + ": " + e.getMessage());
             return null;
         }
+    }
+
+    /** A fresh random token identifying the account on the HTTP services until the server restarts. */
+    public synchronized String newSession(String name)
+    {
+        sessions.values().removeIf(account -> account.equalsIgnoreCase(name));
+
+        byte[] bytes = new byte[32];
+        random.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        sessions.put(token, name);
+        return token;
+    }
+
+    public synchronized String getSessionAccount(String token)
+    {
+        return token != null ? sessions.get(token) : null;
+    }
+
+    /** Extra per-account JSON documents, like the market storage. */
+    public synchronized JSONObject loadData(String name, String file)
+    {
+        File data = new File(accountDir(key(name)), file);
+
+        if (!data.isFile())
+            return null;
+
+        try
+        {
+            return new JSONObject(read(data));
+        }
+        catch (Exception e)
+        {
+            if (Log.ERROR) Log.error("Corrupted " + file + " for " + name + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    public synchronized void saveData(String name, String file, JSONObject data)
+    {
+        write(new File(accountDir(key(name)), file), data.toString(2));
     }
 
     public synchronized void saveProfile(String name, JSONObject profile)

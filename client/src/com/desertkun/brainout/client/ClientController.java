@@ -1,5 +1,11 @@
 package com.desertkun.brainout.client;
 
+import com.desertkun.brainout.online.PrivateMarketService;
+
+import org.anthillplatform.runtime.services.LoginService;
+
+import org.anthillplatform.runtime.AnthillRuntime;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
@@ -183,6 +189,32 @@ public class ClientController extends Controller
 
     /* =================================== SERVER RECEIVERS =================================== */
 
+    public boolean received(final PrivateSessionMsg msg)
+    {
+        Gdx.app.postRunnable(() -> usePrivateServices(msg));
+        return true;
+    }
+
+    // a private server keeps the stash itself: point the market service at it and log in with its token
+    private void usePrivateServices(PrivateSessionMsg msg)
+    {
+        AnthillRuntime runtime = AnthillRuntime.Get();
+        if (runtime == null || msg.token == null)
+            return;
+
+        String location = "http://" + serverLocation + ":" + serverHttpPort + msg.marketPath;
+
+        PrivateMarketService.Install(runtime, location);
+        runtime.setService("login", "http://" + serverLocation);
+
+        LoginService loginService = LoginService.Get();
+        if (loginService != null)
+        {
+            loginService.setCurrentAccessToken(msg.token);
+        }
+    }
+
+    @SuppressWarnings("unused")
     public boolean received(final ErrorMsg msg)
     {
         Gdx.app.postRunnable(() ->
