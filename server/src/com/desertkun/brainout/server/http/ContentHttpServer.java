@@ -1,6 +1,7 @@
 package com.desertkun.brainout.server.http;
 
 import com.desertkun.brainout.online.LocalMarket;
+import com.desertkun.brainout.online.LocalStats;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -26,6 +27,8 @@ public class ContentHttpServer
         server.createContext("/upload-map", new UploadMapHandler());
         // stash storage of private servers, in place of the official market service
         server.createContext(LocalMarket.PATH, new LocalMarket());
+        // ranking of the private server's players
+        server.createContext(LocalStats.PATH, new LocalStats());
 
         server.setExecutor(Executors.newFixedThreadPool(4));
 

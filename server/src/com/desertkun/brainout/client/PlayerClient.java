@@ -3,6 +3,7 @@ package com.desertkun.brainout.client;
 import com.desertkun.brainout.online.AccountStore;
 import com.desertkun.brainout.server.console.ChatCommands;
 import com.desertkun.brainout.online.LocalMarket;
+import com.desertkun.brainout.online.LocalStats;
 import com.desertkun.brainout.mode.GameMode;
 import com.desertkun.brainout.mode.ServerFreeRealization;
 
@@ -826,6 +827,7 @@ public class PlayerClient extends Client
             accessToken = loginService.newAccessToken(session);
         }
         sendTCP(new PrivateSessionMsg(session, LocalMarket.PATH));
+        LocalStats.PlayerJoined(name);
 
         onlineInitialized(true);
         setRights(accounts.isAdmin(name) ? PlayerRights.admin : PlayerRights.none);
@@ -2943,6 +2945,11 @@ public class PlayerClient extends Client
     @Override
     public void release()
     {
+        if (accountName != null)
+        {
+            LocalStats.PlayerLeft(accountName);
+        }
+
         if (getTeam() != null && getAccount() != null)
         {
             ClientList.HistoryRecord record = BrainOutServer.Controller.getClients().newHistoryRecord(this);

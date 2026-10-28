@@ -63,6 +63,7 @@ public class ExitMenu extends Menu
                 addButton("Retour au lobby", () -> switchTo(PrivateServer.Mode.lobby));
             }
             addButton("Changer de mode", this::changeMode);
+            addButton("Classement", this::ranking);
         }
         addButton(L.get("MENU_EXIT"), this::exit);
 
@@ -188,6 +189,17 @@ public class ExitMenu extends Menu
     {
         close();
         PrivateServer.SwitchTo(mode);
+    }
+
+    private void ranking()
+    {
+        GameState gs = getGameState();
+
+        if (gs == null)
+            return;
+
+        close();
+        gs.pushMenu(new PrivateStatsMenu());
     }
 
     private void changeMode()

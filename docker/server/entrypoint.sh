@@ -20,6 +20,8 @@
 # ALLOWED_ACCOUNTS  comma separated names allowed to create an account (default: anyone)
 # ADMINS          comma separated account names with admin rights (console commands)
 # DATA_DIR        where accounts and profiles are kept           (default: /data, mount a volume)
+# BACKUP_HOURS    hours between backups of DATA_DIR into DATA_DIR/backups, 0 disables (default: 24)
+# BACKUP_KEEP     backups kept, the oldest are deleted           (default: 7)
 # JAVA_OPTS       extra JVM options for every mode   (default: -Xmx1g open world, -Xmx512m matches)
 
 set -e
@@ -59,7 +61,7 @@ start_mode() {
     echo "BrainOut $mode: ports $port,$((port + 1)),$((port + 2))"
 
     # match bots are read from server_settings; the open world uses FREEPLAY_BOTS
-    server_settings="{\"bots\":$bots}" java \
+    PRIVATE_MODE="$mode" server_settings="{\"bots\":$bots}" java \
         -XX:-OmitStackTraceInFastThrow -XX:+UseG1GC \
         -Djava.net.preferIPv4Stack=true \
         ${JAVA_OPTS:-$memory} \
@@ -70,6 +72,27 @@ start_mode() {
 }
 
 echo "Open world bots: $FREEPLAY_BOTS ($BOT_DIFFICULTY), match bots: $MATCH_BOTS (${MATCH_BOT_DIFFICULTY:-adaptive})"
+
+# accounts, inventories and progress are copied regularly: a bad update or a mistake can be undone
+backup_loop() {
+    local hours="${BACKUP_HOURS:-24}" keep="${BACKUP_KEEP:-7}"
+    [ "$hours" -gt 0 ] 2>/dev/null || { sleep infinity; return; }
+    mkdir -p "$DATA/backups"
+    while true; do
+        sleep 300
+        local file="$DATA/backups/data-$(date +%Y%m%d-%H%M).tar.gz"
+        if tar -czf "$file.tmp" --exclude=./backups -C "$DATA" . 2>/dev/null; then
+            mv "$file.tmp" "$file"
+            echo "[backup] $file"
+            ls -1t "$DATA"/backups/data-*.tar.gz | tail -n +$((keep + 1)) | xargs -r rm -f
+        else
+            rm -f "$file.tmp"
+            echo "[backup] failed" >&2
+        fi
+        sleep $((hours * 3600 - 300))
+    done
+}
+backup_loop &
 
 IFS=',' read -ra mode_list <<< "$MODES"
 for mode in "${mode_list[@]}"; do

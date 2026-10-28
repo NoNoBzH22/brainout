@@ -35,6 +35,9 @@ services:
       ALLOWED_ACCOUNTS: ""
       # accounts allowed to use admin console commands
       ADMINS: ""
+      # copy of the accounts into /DATA/AppData/brainout/backups every 24 hours, the last 7 kept
+      BACKUP_HOURS: "24"
+      BACKUP_KEEP: "7"
     volumes:
       # accounts, inventories and progress survive updates of the container
       - /DATA/AppData/brainout:/data

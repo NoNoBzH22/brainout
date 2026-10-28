@@ -12,7 +12,6 @@ import com.desertkun.brainout.data.active.PlayerData;
 import com.desertkun.brainout.events.Event;
 import com.desertkun.brainout.menu.Menu;
 import com.desertkun.brainout.menu.impl.*;
-import com.desertkun.brainout.menu.popups.AlertPopup;
 import com.desertkun.brainout.mode.GameMode;
 import com.desertkun.brainout.online.Matchmaking;
 import com.desertkun.brainout.online.RoomSettings;
@@ -110,7 +109,7 @@ public class ClientMenuActivatorComponentData extends ClientActiveActivatorCompo
                 case "freeplay":
                     return PrivateServer.ModesPopup(PrivateServer.Mode.free);
                 case "top100players":
-                    return new AlertPopup("Pas de classement sur un serveur prive");
+                    return new PrivateStatsMenu();
             }
         }
 

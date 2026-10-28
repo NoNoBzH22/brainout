@@ -12,9 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -286,6 +288,37 @@ public class AccountStore
     public synchronized void saveShared(String file, JSONObject data)
     {
         write(new File(root, file), data.toString(2));
+    }
+
+    /** Every account with a saved profile: {name, profile}. */
+    public synchronized List<Object[]> listProfiles()
+    {
+        List<Object[]> result = new ArrayList<>();
+        File[] dirs = root.listFiles(File::isDirectory);
+
+        if (dirs == null)
+            return result;
+
+        for (File dir : dirs)
+        {
+            File account = new File(dir, "account.json");
+            File profile = new File(dir, "profile.json");
+
+            if (!account.isFile() || !profile.isFile())
+                continue;
+
+            try
+            {
+                String name = new JSONObject(read(account)).optString("name", dir.getName());
+                result.add(new Object[]{name, new JSONObject(read(profile))});
+            }
+            catch (Exception e)
+            {
+                if (Log.ERROR) Log.error("Skipping account " + dir.getName() + " in the stats: " + e.getMessage());
+            }
+        }
+
+        return result;
     }
 
     public synchronized void saveProfile(String name, JSONObject profile)

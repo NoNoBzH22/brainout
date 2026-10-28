@@ -10,6 +10,14 @@ import com.desertkun.brainout.menu.Menu;
 import com.desertkun.brainout.menu.Popup;
 import com.desertkun.brainout.menu.ui.ClickOverListener;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 /**
  * A private server runs one game per mode, each on its own ports: base port + offset
  * (udp and http follow the tcp port). Players arrive in the lobby and pick a mode there.
@@ -60,6 +68,60 @@ public class PrivateServer
             catch (NumberFormatException ignored)
             {
             }
+        }
+    }
+
+    // the HTTP side of the game the player is in, and the session it gave at login
+    private static String httpLocation;
+    private static String session;
+
+    public static void SetSession(String location, String token)
+    {
+        httpLocation = location;
+        session = token;
+    }
+
+    public static String StatsURL()
+    {
+        if (httpLocation == null || session == null)
+            return null;
+
+        try
+        {
+            return httpLocation + "/private/stats?access_token=" + URLEncoder.encode(session, "UTF-8");
+        }
+        catch (IOException e)
+        {
+            return null;
+        }
+    }
+
+    public static String HttpGet(String url) throws IOException
+    {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(10000);
+
+        try
+        {
+            if (connection.getResponseCode() != 200)
+                throw new IOException("HTTP " + connection.getResponseCode());
+
+            try (InputStream in = connection.getInputStream())
+            {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1)
+                {
+                    out.write(buffer, 0, read);
+                }
+                return new String(out.toByteArray(), StandardCharsets.UTF_8);
+            }
+        }
+        finally
+        {
+            connection.disconnect();
         }
     }
 

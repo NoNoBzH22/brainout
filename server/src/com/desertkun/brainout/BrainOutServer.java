@@ -1,6 +1,7 @@
 package com.desertkun.brainout;
 
 import com.desertkun.brainout.online.LocalMarket;
+import com.desertkun.brainout.online.LocalStats;
 import com.desertkun.brainout.online.PrivateMarketService;
 
 import com.badlogic.gdx.Gdx;
@@ -195,6 +196,7 @@ public class BrainOutServer extends BrainOut implements Runnable
             if (http > 0)
             {
                 PrivateMarketService.Install(Online, "http://127.0.0.1:" + http + LocalMarket.PATH);
+                LocalStats.StartHeartbeat();
             }
         }
 

@@ -205,6 +205,7 @@ public class ClientController extends Controller
         String location = "http://" + serverLocation + ":" + serverHttpPort + msg.marketPath;
 
         PrivateMarketService.Install(runtime, location);
+        PrivateServer.SetSession("http://" + serverLocation + ":" + serverHttpPort, msg.token);
         runtime.setService("login", "http://" + serverLocation);
 
         LoginService loginService = LoginService.Get();
