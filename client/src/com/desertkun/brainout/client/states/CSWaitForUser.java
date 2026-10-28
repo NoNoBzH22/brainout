@@ -6,6 +6,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.desertkun.brainout.BrainOut;
 import com.desertkun.brainout.BrainOutClient;
 import com.desertkun.brainout.client.PrivateServer;
+import com.desertkun.brainout.client.Updater;
 import com.desertkun.brainout.menu.popups.OKInputPopup;
 
 import java.nio.charset.StandardCharsets;
@@ -49,7 +50,8 @@ public class CSWaitForUser extends ControllerState
         }
         else
         {
-            askAddress();
+            // a newer build of the game is offered first
+            Updater.Check(this::askAddress);
         }
     }
 

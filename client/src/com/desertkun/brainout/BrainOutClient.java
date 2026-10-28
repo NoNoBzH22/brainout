@@ -20,6 +20,7 @@ import com.desertkun.brainout.client.SocialController;
 import com.desertkun.brainout.client.settings.ClientSettings;
 import com.desertkun.brainout.common.enums.DisconnectReason;
 import com.desertkun.brainout.events.Event;
+import com.desertkun.brainout.events.ScreenSizeUpdatedEvent;
 import com.desertkun.brainout.gs.GameState;
 import com.desertkun.brainout.gs.MainMenuState;
 import com.desertkun.brainout.managers.*;
@@ -420,8 +421,24 @@ public class BrainOutClient extends BrainOut implements ApplicationListener
     @Override
     public void resize(int width, int height)
     {
+        // a minimized window (alt-tab in fullscreen) reports 0x0: keep the real size, or the
+        // screens created meanwhile (a map that finished loading) would stay black
+        if (width <= 0 || height <= 0)
+            return;
+
         screenWidth = width;
         screenHeight = height;
+
+        // fit the screens to the window again, including the ones created while it was minimized
+        if (statesStack != null)
+        {
+            for (GameState state : statesStack)
+            {
+                state.reset();
+            }
+        }
+
+        BrainOut.EventMgr.sendDelayedEvent(ScreenSizeUpdatedEvent.obtain());
     }
 
     @Override

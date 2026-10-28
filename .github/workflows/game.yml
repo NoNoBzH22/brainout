@@ -72,7 +72,11 @@ jobs:
           cache: gradle
 
       - name: Build client jar
-        run: ./gradlew --no-daemon :desktop:dist -x :desktop:obfuscate
+        run: |
+          ./gradlew --no-daemon :desktop:dist -x :desktop:obfuscate
+          # the game compares its build number with the latest release to offer updates
+          echo "${{ github.run_number }}" > build.txt
+          jar uf bin/client/brainout-desktop.jar build.txt
 
       - uses: actions/upload-artifact@v5
         with:
@@ -152,9 +156,15 @@ jobs:
           test -f build/out/BrainOut/BrainOut.exe
           # one file installer (Inno Setup is installed on GitHub's Windows runners)
           mkdir -p build/setup
-          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q \
-            "-DSource=$(cygpath -w build/out/BrainOut)" "-DOutput=$(cygpath -w build/setup)" \
-            "-DVersion=1.0.${{ github.run_number }}" packaging/windows/BrainOut.iss
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          [ -f "$ISCC" ] || choco install innosetup -y --no-progress > /dev/null
+          if ! log=$("$ISCC" \
+              "-DSource=$(cygpath -w build/out/BrainOut)" "-DOutput=$(cygpath -w build/setup)" \
+              "-DVersion=1.0.${{ github.run_number }}" packaging/windows/BrainOut.iss 2>&1); then
+            echo "$log" | tail -30
+            echo "::error title=Inno Setup::$(echo "$log" | tail -8 | tr '\n' ' ')"
+            exit 1
+          fi
           cd build/out && 7z a -tzip ${{ matrix.artifact }}.zip BrainOut > /dev/null
 
       - name: Upload the Windows installer

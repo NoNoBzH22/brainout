@@ -26,6 +26,7 @@ SolidCompression=yes
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
+CloseApplications=force
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -48,3 +49,5 @@ Name: "{userdesktop}\BrainOut"; Filename: "{app}\BrainOut.exe"; Tasks: desktopic
 
 [Run]
 Filename: "{app}\BrainOut.exe"; Description: "{cm:LaunchProgram,BrainOut}"; Flags: nowait postinstall skipifsilent
+; updates from the game install silently, then start it again
+Filename: "{app}\BrainOut.exe"; Flags: nowait; Check: WizardSilent

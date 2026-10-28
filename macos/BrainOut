@@ -31,6 +31,7 @@ exec "$RES/runtime/bin/java" \
     -XstartOnFirstThread \
     -Xmx2g \
     -Dapple.awt.application.name=BrainOut \
+    -Dbrainout.app="$(dirname "$CONTENTS")" \
     --add-opens java.base/java.lang=ALL-UNNAMED \
     --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
     --add-opens java.base/java.util=ALL-UNNAMED \
