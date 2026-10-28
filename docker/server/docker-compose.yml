@@ -23,6 +23,8 @@ services:
       # bot damage and accuracy multipliers (admins can also change them live with /botdegats and /botprecision)
       BOT_DAMAGE: "1"
       BOT_ACCURACY: "1"
+      # experience multiplier: 3 levels up three times faster
+      XP_MULTIPLIER: "1"
       # only these names can create an account, separated by commas
       ALLOWED_ACCOUNTS: ""
       # accounts allowed to use admin console commands

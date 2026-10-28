@@ -35,7 +35,7 @@ public class ChatCommands
         "/soin : soin complet   /god : invincible on/off",
         "/jour /nuit /heure 0-23   /pluie /soleil",
         "/tp JOUEUR : aller vers lui   /tpici JOUEUR : le faire venir   /kick JOUEUR",
-        "/joueurs : qui est en ligne   /bots [nombre]",
+        "/joueurs : qui est en ligne   /bots [nombre]   /xp NOMBRE [JOUEUR] : donner de l'XP",
         "/difficulte adaptive|easy|normal|hard|nightmare|mix",
         "/botdegats 0.1-5 (1 = normal)   /botprecision 0.1-5 (1 = normal)",
     };
@@ -121,6 +121,18 @@ public class ChatCommands
                     {
                         target.kick("Expulse par un admin");
                         player.sendSystemMessage(target.getName() + " a ete expulse.");
+                    }
+                    return true;
+                }
+                case "xp":
+                {
+                    int amount = Integer.parseInt(arg(args, 1, "0"));
+                    PlayerClient target = args.length > 2 ? find(player, args[2]) : player;
+                    if (target != null && amount > 0)
+                    {
+                        target.addScore(amount, true);
+                        player.sendSystemMessage(target.getName() + " +" + amount + " XP (niveau " +
+                            target.getLevel(Constants.User.LEVEL, 1) + ")");
                     }
                     return true;
                 }

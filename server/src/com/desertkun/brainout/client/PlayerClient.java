@@ -717,6 +717,21 @@ public class PlayerClient extends Client
 
     private String accountName;
 
+    private static final float XP_MULTIPLIER = ReadXpMultiplier();
+
+    private static float ReadXpMultiplier()
+    {
+        try
+        {
+            String value = System.getenv("XP_MULTIPLIER");
+            return value != null ? Math.max(0.1f, Math.min(20.0f, Float.parseFloat(value))) : 1.0f;
+        }
+        catch (NumberFormatException e)
+        {
+            return 1.0f;
+        }
+    }
+
     /** Name of the private server account this player logged in with, null for guests. */
     public String getAccountName()
     {
@@ -3259,6 +3274,9 @@ public class PlayerClient extends Client
             // nothing applies here
             return;
         }
+
+        // private servers can speed up progression with XP_MULTIPLIER
+        score *= XP_MULTIPLIER;
 
         super.addScore(score, addStat);
 
