@@ -2,6 +2,7 @@ package com.desertkun.brainout.menu.impl;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
@@ -560,16 +561,21 @@ public class SettingsMenu extends Menu
             {
                 final Property.KeyProperty keyProperty = ((Property.KeyProperty) property);
 
-                final TextButton textButton = new TextButton(Input.Keys.toString(keyProperty.getValue()),
+                final TextButton textButton = new TextButton(KeyName(keyProperty.getValue()),
                         BrainOutClient.Skin, "button-default");
+                keyButtons.put(textButton, keyProperty);
 
                 textButton.addListener(new ClickOverListener()
                 {
+                    // only the key pressed right after a click changes the setting
+                    private boolean waiting;
+
                     @Override
                     public void clicked(InputEvent event, float x, float y)
                     {
                         playSound(MenuSound.select);
 
+                        waiting = true;
                         textButton.setText("...");
                         textButton.getStage().setKeyboardFocus(textButton);
                     }
@@ -577,8 +583,23 @@ public class SettingsMenu extends Menu
                     @Override
                     public boolean keyDown(InputEvent event, int keycode)
                     {
-                        keyProperty.setKeyValue(keycode);
-                        textButton.setText(Input.Keys.toString(keyProperty.getValue()));
+                        if (!waiting)
+                            return false;
+
+                        waiting = false;
+                        textButton.getStage().setKeyboardFocus(null);
+
+                        // Escape cancels
+                        if (keycode != Input.Keys.ESCAPE)
+                        {
+                            keyProperty.setKeyValue(keycode);
+                        }
+
+                        // another action may have taken this one's old key
+                        for (ObjectMap.Entry<TextButton, Property.KeyProperty> entry : keyButtons)
+                        {
+                            entry.key.setText(KeyName(entry.value.getValue()));
+                        }
 
                         return true;
                     }
@@ -599,6 +620,13 @@ public class SettingsMenu extends Menu
         pane.setFadeScrollBars(false);
 
         tab.add(pane).expand().fill().padLeft(80).padRight(80).row();
+    }
+
+    private final ObjectMap<TextButton, Property.KeyProperty> keyButtons = new ObjectMap<>();
+
+    private static String KeyName(int keycode)
+    {
+        return keycode == Input.Keys.UNKNOWN ? "-" : Input.Keys.toString(keycode);
     }
 
     private String getMultiLang(String loc)

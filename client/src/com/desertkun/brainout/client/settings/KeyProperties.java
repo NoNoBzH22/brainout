@@ -1,5 +1,6 @@
 package com.desertkun.brainout.client.settings;
 
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.desertkun.brainout.L;
 
@@ -73,7 +74,10 @@ public class KeyProperties extends Properties
 
     public void update()
     {
+        repairConflicts();
+
         keys.clear();
+        codes.clear();
 
         for (Property property : getProperties())
         {
@@ -84,6 +88,53 @@ public class KeyProperties extends Properties
 
             keys.put(keycodeProperty.getValue(), keycodeProperty.getKey());
             codes.put(keycodeProperty.getKey(), keycodeProperty.getValue());
+        }
+    }
+
+    /**
+     * Settings saved by older versions can give one key to two actions, so that only one of them
+     * works: the action the player chose the key for keeps it, the other one takes the default
+     * key of the first, or no key if that one is taken too.
+     */
+    private void repairConflicts()
+    {
+        ObjectMap<Integer, KeycodeProperty> used = new ObjectMap<>();
+
+        for (Property property : getProperties())
+        {
+            if (!(property instanceof KeycodeProperty))
+                continue;
+
+            KeycodeProperty current = (KeycodeProperty) property;
+
+            // Escape opens the game menu: an action bound to it by mistake gets its default key back
+            if (current.getValue() == Input.Keys.ESCAPE)
+            {
+                current.setValue(current.getDefault());
+            }
+
+            KeycodeProperty other = used.get(current.getValue());
+
+            if (other == null || current.getValue() == Input.Keys.UNKNOWN)
+            {
+                used.put(current.getValue(), current);
+                continue;
+            }
+
+            boolean currentChosen = current.getValue() != current.getDefault();
+            KeycodeProperty winner = currentChosen ? current : other;
+            KeycodeProperty loser = winner == current ? other : current;
+
+            int replacement = used.containsKey(winner.getDefault()) || winner.getDefault() == winner.getValue() ?
+                Input.Keys.UNKNOWN : winner.getDefault();
+
+            used.put(winner.getValue(), winner);
+            loser.setValue(replacement);
+
+            if (replacement != Input.Keys.UNKNOWN)
+            {
+                used.put(replacement, loser);
+            }
         }
     }
 }

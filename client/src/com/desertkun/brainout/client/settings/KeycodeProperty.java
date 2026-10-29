@@ -14,7 +14,10 @@ public class KeycodeProperty extends IntegerProperty implements Property.KeyProp
         setKey(key);
 
         this.properties = null;
+        this.def = def;
     }
+
+    private final int def;
 
     public KeycodeProperty(String name, String localization, Integer def, KeyProperties properties, KeyProperties.Keys key)
     {
@@ -23,6 +26,12 @@ public class KeycodeProperty extends IntegerProperty implements Property.KeyProp
         setKey(key);
 
         this.properties = properties;
+        this.def = def;
+    }
+
+    public int getDefault()
+    {
+        return def;
     }
 
     public KeyProperties.Keys getKey()
@@ -38,6 +47,21 @@ public class KeycodeProperty extends IntegerProperty implements Property.KeyProp
     @Override
     public void setKeyValue(int keycode)
     {
+        int previous = getValue();
+
+        if (properties != null && keycode != previous)
+        {
+            // a key does one thing: the action that had it gets this one's old key
+            for (Property property : properties.getProperties())
+            {
+                if (property != this && property instanceof KeycodeProperty &&
+                    ((KeycodeProperty) property).getValue() == keycode)
+                {
+                    ((KeycodeProperty) property).setValue(previous);
+                }
+            }
+        }
+
         setValue(keycode);
 
         if (properties != null)
