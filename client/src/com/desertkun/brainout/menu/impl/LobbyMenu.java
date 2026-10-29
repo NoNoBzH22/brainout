@@ -470,8 +470,9 @@ public class LobbyMenu extends PlayerSelectionMenu
             L.get("MENU_HOME_BASE"),
             BrainOutClient.Skin, "button-default");
 
+        // private servers have no global conflict: the button opens their ranking instead
         globalConflict = new TextButton(
-                L.get("MENU_GLOBAL_CONFLICT"),
+                PrivateServer.IsActive() ? "Classement et defis" : L.get("MENU_GLOBAL_CONFLICT"),
                 BrainOutClient.Skin, "button-activated");
 
         quickPlay = new TextButton(
@@ -539,6 +540,12 @@ public class LobbyMenu extends PlayerSelectionMenu
             public void clicked(InputEvent event, float x, float y)
             {
                 Menu.playSound(MenuSound.select);
+
+                if (PrivateServer.IsActive())
+                {
+                    pushMenu(new PrivateStatsMenu());
+                    return;
+                }
 
                 globalConflict();
             }

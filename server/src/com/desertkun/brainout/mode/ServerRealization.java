@@ -1,5 +1,9 @@
 package com.desertkun.brainout.mode;
 
+import com.desertkun.brainout.common.msg.VoiceChatMsg;
+import com.desertkun.brainout.Constants;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.OrderedMap;
@@ -377,7 +381,47 @@ public abstract class ServerRealization<G extends GameMode> extends GameModeReal
 
     protected void maxPlayersIncreased(int diff) {}
 
-    public void voiceChat(PlayerClient playerClient, short[] data, float volume) {}
+    /**
+     * Voice chat in the lobby and matches: players hear the ones close to them, louder the closer,
+     * and their teammates wherever they are (everyone is an enemy in deathmatch). The open world
+     * has its own rules, see ServerFreeRealization.
+     */
+    public void voiceChat(PlayerClient playerClient, short[] data, float volume)
+    {
+        PlayerData from = playerClient.getPlayerData();
+        boolean teams = getGameMode().getID() != GameMode.ID.deathmatch;
+
+        for (Client client : BrainOutServer.Controller.getClients().values())
+        {
+            if (!(client instanceof PlayerClient) || client == playerClient)
+                continue;
+
+            float heard = 0;
+
+            if (teams && playerClient.getTeam() != null && playerClient.getTeam() == client.getTeam())
+            {
+                heard = volume;
+            }
+            else if (from != null && client.getPlayerData() != null &&
+                from.getDimension().equals(client.getPlayerData().getDimension()))
+            {
+                PlayerData to = client.getPlayerData();
+                float distance = Vector2.dst2(from.getX(), from.getY(), to.getX(), to.getY());
+
+                if (distance < Constants.Voice.DISTANCE_SQR)
+                {
+                    heard = volume * Interpolation.pow4Out.apply(1.0f - distance / Constants.Voice.DISTANCE_SQR);
+                }
+            }
+
+            if (heard <= 0)
+                continue;
+
+            ((PlayerClient) client).sendUDP(from != null ?
+                new VoiceChatMsg(playerClient.getId(), from.getId(), from.getDimensionId(), data, heard) :
+                new VoiceChatMsg(playerClient.getId(), -1, -1, data, heard));
+        }
+    }
 
     @Override
     public void init(PlayState.InitCallback callback)
