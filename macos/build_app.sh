@@ -33,6 +33,8 @@ chmod +x "$APP/Contents/MacOS/BrainOut"
 cp "$ROOT/data/assets/main/icons/icon.icns" "$APP/Contents/Resources/icon.icns"
 
 cp "$JAR" "$APP/Contents/Resources/game/"
+# the launcher copies the game files out of the bundle when this changes
+echo "$VERSION-$(date +%s)" > "$APP/Contents/Resources/game/stamp"
 cp -R "$PACKAGES" "$APP/Contents/Resources/game/packages"
 
 if [ -n "${MAC_RUNTIME:-}" ]; then

@@ -401,7 +401,8 @@ public class Updater
         else
         {
             String app = System.getProperty("brainout.app");
-            String restart = app != null ? "open \"" + app + "\"" :
+            // by its bundle id: macOS may have run the app from a temporary copy that is gone by then
+            String restart = app != null ? "open -b com.nonobzh22.brainout || open \"" + app + "\"" :
                 "[ -x \"$DIR/../BrainOut.sh\" ] && nohup \"$DIR/../BrainOut.sh\" > /dev/null 2>&1 &";
 
             File script = new File(dir, "update.sh");
